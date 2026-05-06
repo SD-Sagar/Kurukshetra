@@ -149,12 +149,21 @@ export default class MainGame extends Phaser.Scene {
         const baseAngle = Phaser.Math.Angle.Between(enemy.x, enemy.y, targetX, targetY);
 
         const spawnB = (angle) => {
-            const b = this.enemyBullets.get(enemy.x, enemy.y, 'bullet_enemy');
+            let spawnX = enemy.x;
+            let spawnY = enemy.y;
+
+            if (enemy.visual && enemy.visual.getMuzzlePosition) {
+                const muzzle = enemy.visual.getMuzzlePosition();
+                spawnX = muzzle.x;
+                spawnY = muzzle.y;
+            }
+
+            const b = this.enemyBullets.get(spawnX, spawnY, 'bullet_enemy');
             if (b) {
                 b.setActive(true).setVisible(true).setTint(stats.projectileColor || stats.color);
                 b.damage = stats.damage;
                 if (b.body) {
-                    b.body.reset(enemy.x, enemy.y);
+                    b.body.reset(spawnX, spawnY);
                     b.body.setAllowGravity(false);
                     b.body.setSize(stats.isRocket ? 16 : 8, 8);
                 }

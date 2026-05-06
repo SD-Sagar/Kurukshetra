@@ -26,7 +26,7 @@ export default class Player {
         this.lastDamageTime = 0;
 
         // Systems
-        this.weapons = new WeaponSystem(scene, this.sprite);
+        this.weapons = new WeaponSystem(scene, this.sprite, this.visual);
 
         // Inputs mapping
         this.keys = this.scene.input.keyboard.addKeys({
@@ -81,8 +81,8 @@ export default class Player {
         
         // Handle aiming with mouse pointer
         if (pointer) {
-            // Use pointer.worldX/Y for absolute map position
-            this.visual.aimAt(pointer.worldX, pointer.worldY);
+            const worldPoint = this.scene.cameras.main.getWorldPoint(pointer.x, pointer.y);
+            this.visual.aimAt(worldPoint.x, worldPoint.y);
         }
     }
 

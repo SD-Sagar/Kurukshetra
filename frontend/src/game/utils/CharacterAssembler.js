@@ -19,7 +19,7 @@ export default class CharacterAssembler {
         this.armFront = this.scene.add.sprite(15, -5, `${prefix}_arm`);
         
         this.weapon = this.scene.add.sprite(0, 0, 'pistol');
-        this.weapon.setOrigin(0.9, 0.5); // Grip by the handle side
+        this.weapon.setOrigin(0.85, 0.5); // Grip by the Handle (Right side of PNG)
         this.weapon.setVisible(false);
         this.head = this.scene.add.sprite(0, -35, `${prefix}_head`);
         
@@ -39,10 +39,10 @@ export default class CharacterAssembler {
             this.armBack,
             this.torso,
             this.legFront,
-            this.armFront,
-            this.weapon,
             this.grenadeBelt,
-            this.head
+            this.head,
+            this.armFront,
+            this.weapon
         ]);
 
         this.walkCycle = 0;
@@ -55,16 +55,8 @@ export default class CharacterAssembler {
 
         if (weaponColor !== null) {
             this.weapon.setVisible(true);
-            // Dynamic Sprite Swap: key is passed as a string now (e.g., 'pistol')
-            const weaponKey = this.scene.player?.weapons.inventory[this.scene.player?.weapons.currentSlot] || 'pistol';
-            
-            // For enemies/Sarge, we might need a different way to know their current weapon key
-            // Let's assume we pass the weaponKey instead of weaponColor to update
             if (typeof weaponColor === 'string') {
                  this.weapon.setTexture(weaponColor);
-            } else {
-                 // Fallback to pistol if color is passed but we need a sprite
-                 // Ideally we update the call site to pass the key
             }
         } else {
             this.weapon.setVisible(false);
@@ -73,6 +65,9 @@ export default class CharacterAssembler {
         if (isCrouching) {
             this.legFront.setTexture(`${prefix}_leg_bend`);
             this.legBack.setTexture(`${prefix}_leg_bend`);
+            this.torso.y = 12;
+            this.head.y = -23;
+            this.armFront.y = 7;
             this.armBack.y = 7;
             this.grenadeBelt.y = 27; // Shift down while crouching
         } else {
@@ -114,39 +109,68 @@ export default class CharacterAssembler {
     }
 
     aimAt(targetX, targetY) {
-        // COORDINATE SYSTEM FIX:
-        // Instead of using world coordinates which can lag or glitch with camera scroll,
-        // we use the screen position of the player and the screen position of the mouse.
-        const cam = this.scene.cameras.main;
-        
-        // Convert player container position to Screen Space
-        const playerScreenX = (this.container.x - cam.scrollX) * cam.zoom;
-        const playerScreenY = (this.container.y - cam.scrollY) * cam.zoom;
-        
-        // Get mouse position in Screen Space
-        const mouseX = this.scene.input.activePointer.x;
-        const mouseY = this.scene.input.activePointer.y;
+        if (targetX === undefined || targetY === undefined) return;
 
-        const angle = Phaser.Math.Angle.Between(playerScreenX, playerScreenY, mouseX, mouseY);
+        // 1. Flip Deadzone / Buffer (Prevents flickering at center)
+        const deadzone = 15;
+        const isFacingLeft = this.container.scaleX < 0;
         
-        // Horizontal Flipping Logic
-        if (mouseX < playerScreenX) {
+        if (isFacingLeft && targetX > this.container.x + deadzone) {
+            this.container.setScale(this.baseScale, this.baseScale);
+        } else if (!isFacingLeft && targetX < this.container.x - deadzone) {
             this.container.setScale(-this.baseScale, this.baseScale);
+        }
+
+        // 2. Continuous Angle Calculation
+        const angle = Phaser.Math.Angle.Between(this.container.x, this.container.y, targetX, targetY);
+        const flipFactor = this.container.scaleX < 0 ? -1 : 1;
+        
+        // Adjust arm rotation based on flip
+        if (this.container.scaleX < 0) {
             const flippedRotation = -angle + Math.PI;
             this.armFront.rotation = flippedRotation - Math.PI/2;
             this.armBack.rotation = flippedRotation - Math.PI/2;
         } else {
-            this.container.setScale(this.baseScale, this.baseScale);
             this.armFront.rotation = angle - Math.PI/2;
             this.armBack.rotation = angle - Math.PI/2;
         }
 
-        // Sync weapon rotation
+        // 3. Locked-Grip: Position weapon at the Hand (End of Arm)
         if (this.currentWeaponColor !== null) {
-            this.weapon.x = this.armFront.x;
-            this.weapon.y = this.armFront.y + 15;
-            this.weapon.rotation = this.armFront.rotation;
+            // Precise hand offset (The hand is at the bottom of the arm sprite)
+            const armVisualLength = 42 * this.baseScale; 
+            
+            // The arm points "Down" at 0 rotation, so we add PI/2 to get the pointing vector
+            const armAngle = this.armFront.rotation + Math.PI/2;
+            
+            this.weapon.x = this.armFront.x + Math.cos(armAngle) * armVisualLength;
+            this.weapon.y = this.armFront.y + Math.sin(armAngle) * armVisualLength;
+            
+            // Align gun barrel with the arm direction
+            // Subtracting PI/2 because handle is on the Right (0.85) and barrel is on the Left
+            this.weapon.rotation = this.armFront.rotation - Math.PI/2;
+            
+            // Universal 'Right-Side Up' Fix:
+            // Since the PNG points Left, rotating it 180 to face forward makes it upside down.
+            // We set scaleY to -1 to flip it back to being right-side up.
+            this.weapon.setScale(1, -1);
         }
+    }
+
+    getMuzzlePosition() {
+        if (!this.weapon.visible) return { x: this.container.x, y: this.container.y };
+        
+        // Muzzle is at the opposite end of the pivot (0.85)
+        const muzzleDist = 45 * this.baseScale;
+        const flip = this.container.scaleX < 0 ? -1 : 1;
+        
+        // Shoot angle follows the weapon rotation
+        const shootAngle = this.weapon.rotation + (flip < 0 ? Math.PI : 0);
+        
+        return {
+            x: this.container.x + (this.weapon.x * flip) + Math.cos(shootAngle) * muzzleDist,
+            y: this.container.y + this.weapon.y + Math.sin(shootAngle) * muzzleDist
+        };
     }
 
     destroy() {

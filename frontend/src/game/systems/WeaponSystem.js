@@ -1,9 +1,10 @@
 import Phaser from 'phaser';
 
 export default class WeaponSystem {
-    constructor(scene, owner) {
+    constructor(scene, owner, visual = null) {
         this.scene = scene;
         this.owner = owner;
+        this.visual = visual;
 
         // Projectile group with Zero Gravity
         this.bullets = this.scene.physics.add.group({
@@ -14,13 +15,13 @@ export default class WeaponSystem {
 
         // Tactical Archetypes
         this.weaponData = {
-            pistol: { name: 'Pistol', color: 0x4ade80, damage: 15, fireRate: 400, muzzleSpeed: 900, range: 1000, magSize: 12, reloadTime: 1500, spread: 0 },
-            smg: { name: 'SMG', color: 0x3b82f6, damage: 10, fireRate: 100, muzzleSpeed: 1100, range: 800, magSize: 30, reloadTime: 2000, spread: 0.08 }, // 0.08 rad spread
-            rifle: { name: 'Rifle', color: 0xfacc15, damage: 25, fireRate: 100, muzzleSpeed: 1300, range: 1500, magSize: 20, reloadTime: 2500, spread: 0.08 }, // Matches SMG spread/fireRate
-            sniper: { name: 'Sniper', color: 0xffffff, damage: 100, fireRate: 1200, muzzleSpeed: 3000, range: 4000, magSize: 5, reloadTime: 3500, isTracer: true },
-            shotgun: { name: 'Shotgun', color: 0x8b5cf6, damage: 20, fireRate: 800, muzzleSpeed: 800, range: 450, magSize: 6, pellets: 5, fanAngle: 30, reloadTime: 2500 },
-            launcher: { name: 'Launcher', color: 0x000000, projectileColor: 0xff00ff, damage: 100, fireRate: 1500, muzzleSpeed: 500, range: 10000, magSize: 3, reloadTime: 3000, isRocket: true },
-            sarge_smg: { name: 'Elite SMG', color: 0x22d3ee, damage: 15, fireRate: 100, muzzleSpeed: 1200, range: 1000, magSize: 50, reloadTime: 2000, spread: 0 }
+            pistol: { name: 'Pistol', damage: 15, range: 5000, muzzleSpeed: 1000, fireRate: 400, magSize: 12, reloadTime: 1500, color: 0xffffff, key: 'pistol' },
+            smg: { name: 'SMG', damage: 12, range: 5000, muzzleSpeed: 1200, fireRate: 100, magSize: 30, reloadTime: 2000, spread: 0.08, color: 0x00ffff, key: 'smg' },
+            rifle: { name: 'Rifle', damage: 20, range: 5000, muzzleSpeed: 1300, fireRate: 100, magSize: 20, reloadTime: 2500, spread: 0.08, color: 0x00ff00, key: 'rifle' },
+            sniper: { name: 'Sniper', damage: 85, range: 5000, muzzleSpeed: 2500, fireRate: 1500, magSize: 5, reloadTime: 3500, isTracer: true, color: 0xff00ff, key: 'sniper' },
+            shotgun: { name: 'Shotgun', damage: 10, range: 600, muzzleSpeed: 900, fireRate: 800, magSize: 6, reloadTime: 2500, pellets: 8, spread: 0.3, color: 0xffff00, key: 'shotgun' },
+            launcher: { name: 'Launcher', damage: 100, range: 5000, muzzleSpeed: 600, fireRate: 2000, magSize: 3, reloadTime: 3000, isRocket: true, color: 0xff4500, key: 'launcher' },
+            sarge_smg: { name: 'Sarge SMG', damage: 15, range: 5000, muzzleSpeed: 1200, fireRate: 120, magSize: 50, reloadTime: 2000, spread: 0.05, color: 0xffd700, key: 'sarge_smg' }
         };
 
         this.inventory = [null, null]; 
@@ -146,13 +147,23 @@ export default class WeaponSystem {
     }
 
     spawnBullet(targetX, targetY, weapon) {
-        const bullet = this.bullets.get(this.owner.x, this.owner.y, 'bullet_player');
+        // Use Muzzle Position from Visual if available
+        let spawnX = this.owner.x;
+        let spawnY = this.owner.y;
+
+        if (this.visual && this.visual.getMuzzlePosition) {
+            const muzzle = this.visual.getMuzzlePosition();
+            spawnX = muzzle.x;
+            spawnY = muzzle.y;
+        }
+
+        const bullet = this.bullets.get(spawnX, spawnY, 'bullet_player');
         if (bullet) {
             bullet.setActive(true).setVisible(true);
-            bullet.setPosition(this.owner.x, this.owner.y);
+            bullet.setPosition(spawnX, spawnY);
             
             if (bullet.body) {
-                bullet.body.reset(this.owner.x, this.owner.y);
+                bullet.body.reset(spawnX, spawnY);
                 bullet.body.setAllowGravity(false); // ENSURE NO GRAVITY
                 bullet.body.setSize(weapon.isRocket ? 16 : 8, 8);
             }
@@ -311,7 +322,12 @@ export default class WeaponSystem {
         for (let i = 0; i < 2; i++) {
             if (this.inventory[i] === null) {
                 this.inventory[i] = weaponKey;
-                if (ammoData) {
+                
+                // Smart Ammo Check: Handle both numbers and objects
+                if (typeof ammoData === 'number') {
+                    this.ammo[i].loaded = wp.magSize;
+                    this.ammo[i].reserve = ammoData;
+                } else if (ammoData && typeof ammoData === 'object') {
                     this.ammo[i] = { ...ammoData };
                 } else {
                     this.ammo[i].loaded = wp.magSize;

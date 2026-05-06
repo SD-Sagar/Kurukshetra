@@ -19,7 +19,7 @@ export default class SargeAI {
 
         // State
         this.health = 200; // Sarge is tough
-        this.weapons = new WeaponSystem(scene, this.sprite);
+        this.weapons = new WeaponSystem(scene, this.sprite, this.visual);
         this.weapons.addWeapon('sarge_smg', 9999); 
     }
 
