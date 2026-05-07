@@ -4,7 +4,7 @@ import initGame from '../game/GameConfig';
 
 export default function GameOverlay() {
   const gameRef = useRef(null);
-  const { playerHealth, playerFuel, ammo, zoomLevel, isMobile } = useGameStore();
+  const { playerHealth, playerFuel, ammo, zoomLevel, grenades, isMobile } = useGameStore();
 
   useEffect(() => {
     // Initialize Phaser game only once
@@ -47,8 +47,14 @@ export default function GameOverlay() {
             <div className="text-white font-mono bg-gray-800 bg-opacity-70 px-2 py-1 rounded mb-2">
               ZOOM: {zoomLevel}x
             </div>
-            <div className="text-white font-bold text-2xl drop-shadow-md">
-              {ammo.loaded} / <span className="text-gray-400 text-lg">{ammo.reserve}</span>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1 text-white bg-gray-800 bg-opacity-70 px-2 py-1 rounded">
+                <span className="text-xl">💣</span>
+                <span className="font-bold">{grenades}</span>
+              </div>
+              <div className="text-white font-bold text-2xl drop-shadow-md">
+                {ammo.loaded} / <span className="text-gray-400 text-lg">{ammo.reserve}</span>
+              </div>
             </div>
           </div>
         </div>

@@ -32,7 +32,7 @@ export default class MainGame extends Phaser.Scene {
         this.platforms = this.physics.add.staticGroup();
         const floorY = worldHeight - 300;
         const mainFloor = this.platforms.create(worldWidth / 2, floorY + 100, 'white_square');
-        mainFloor.setDisplaySize(worldWidth, 200); 
+        mainFloor.setDisplaySize(worldWidth, 200);
         mainFloor.setTint(0x1e293b);
         mainFloor.refreshBody();
 
@@ -82,14 +82,14 @@ export default class MainGame extends Phaser.Scene {
         this.physics.add.overlap(this.enemyBullets, this.sarge.sprite, (s, b) => {
             if (b.isRocket) b.onImpact(); else b.destroy();
         }, null, this);
-        
+
         this.physics.add.overlap(this.enemyBullets, this.player.sprite, this.enemyBulletHitPlayer, null, this);
         this.physics.add.overlap(this.enemies, this.player.sprite, () => this.player.takeDamage(1), null, this);
-        
+
         // Zoom
         this.currentZoomIndex = 0;
         this.uiZoomLevels = [1, 2, 4];
-        this.baseZoom = 0.66; 
+        this.baseZoom = 0.66;
         this.cameras.main.setZoom(this.baseZoom);
         this.input.keyboard.on('keydown-Z', () => this.toggleZoom());
 
@@ -131,12 +131,12 @@ export default class MainGame extends Phaser.Scene {
         const cam = this.cameras.main;
         const worldWidth = 15000;
         const spawnX = Math.random() > 0.5 ? cam.scrollX - 400 : cam.scrollX + cam.width + 400;
-        const enemy = this.enemies.create(Phaser.Math.Clamp(spawnX, 200, worldWidth - 200), 5000, 'white_square'); 
+        const enemy = this.enemies.create(Phaser.Math.Clamp(spawnX, 200, worldWidth - 200), 5000, 'white_square');
         enemy.body.setSize(40, 80);
         enemy.setVisible(false);
         enemy.health = 50;
-        enemy.lastFired = 0; 
-        
+        enemy.lastFired = 0;
+
         const keys = ['pistol', 'smg', 'rifle', 'shotgun', 'sniper', 'launcher'];
         enemy.weaponKey = keys[Phaser.Math.Between(0, keys.length - 1)];
         enemy.weaponStats = this.player.weapons.weaponData[enemy.weaponKey];
@@ -243,10 +243,10 @@ export default class MainGame extends Phaser.Scene {
     bulletHitEnemy(bullet, enemy) {
         if (!bullet.active || !enemy.active) return;
         if (bullet.isRocket) { bullet.onImpact(); return; }
-        
+
         enemy.health -= bullet.damage || 15;
         bullet.destroy();
-        
+
         if (enemy.health <= 0) {
             // RESTORED: Particle explosion effect
             const particles = this.add.particles(enemy.x, enemy.y, 'explosion_part', {
@@ -277,16 +277,16 @@ export default class MainGame extends Phaser.Scene {
 
     update(time, delta) {
         if (!this.player || !this.player.sprite || !this.player.sprite.active) return;
-        
+
         const pointer = this.input.activePointer;
         this.player.update(time, delta, pointer);
         this.sarge.update(time, delta, this.enemies);
 
         this.enemies.getChildren().forEach(enemy => {
             if (enemy && enemy.active && enemy.body) {
-                enemy.visual.container.setPosition(enemy.x, enemy.y);
+                enemy.visual.container.setPosition(enemy.x, enemy.y + 10);
                 enemy.visual.update(time, delta, enemy.body.velocity.x, false, enemy.weaponKey);
-                
+
                 const dist = Phaser.Math.Distance.Between(enemy.x, enemy.y, this.player.sprite.x, this.player.sprite.y);
                 if (dist < enemy.weaponStats.range) {
                     enemy.visual.aimAt(this.player.sprite.x, this.player.sprite.y);
@@ -303,7 +303,7 @@ export default class MainGame extends Phaser.Scene {
         const cam = this.cameras.main;
         const targetX = this.player.sprite.x + (pointer.x - cam.width / 2) * 0.4;
         const targetY = this.player.sprite.y + (pointer.y - cam.height / 2) * 0.4;
-        
+
         cam.scrollX += (targetX - (cam.scrollX + cam.width / 2)) * 0.15;
         cam.scrollY += (targetY - (cam.scrollY + cam.height / 2)) * 0.15;
     }

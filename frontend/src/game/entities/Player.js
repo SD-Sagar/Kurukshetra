@@ -6,10 +6,10 @@ import { useGameStore } from '../../store/gameStore';
 export default class Player {
     constructor(scene, x, y) {
         this.scene = scene;
-        
+
         // 1. Create the Visual Assembly
         this.visual = new CharacterAssembler(scene, { type: 'player' });
-        
+
         // 2. Create an invisible Physics Sprite for collision (The Hitbox)
         // We use a separate sprite so the container can flip and animate freely
         this.sprite = this.scene.physics.add.sprite(x, y, null);
@@ -66,10 +66,10 @@ export default class Player {
 
     update(time, delta, pointer) {
         if (!this.sprite || !this.sprite.active || !this.sprite.body) return;
-        
-        // Sync visual with physics body
-        this.visual.container.setPosition(this.sprite.x, this.sprite.y);
-        
+
+        // Sync visual with physics body - Locked Standing Offset
+        this.visual.container.setPosition(this.sprite.x, this.sprite.y + 10);
+
         this.handleMovement(delta);
         this.handleCombat();
         this.handleHealthRegen(time);
@@ -77,8 +77,8 @@ export default class Player {
 
         // Update visual animations & Weapon Color
         const currentWpKey = this.weapons.inventory[this.weapons.currentSlot];
-        this.visual.update(time, delta, this.sprite.body.velocity.x, this.isCrouching, currentWpKey);
-        
+        this.visual.update(time, delta, this.sprite.body.velocity.x, false, currentWpKey, this.weapons.grenades);
+
         // Handle aiming with mouse pointer
         if (pointer) {
             const worldPoint = this.scene.cameras.main.getWorldPoint(pointer.x, pointer.y);
@@ -87,7 +87,7 @@ export default class Player {
     }
 
     handleMovement(delta) {
-        const moveSpeed = this.isCrouching ? 100 : 300; // Slow waddle while crouching
+        const moveSpeed = 300; 
 
         // Horizontal Movement
         if (this.keys.left.isDown) {
@@ -101,9 +101,9 @@ export default class Player {
         // Jetpack / Jump (15-second duration)
         if (this.keys.space.isDown || this.keys.up.isDown) {
             if (this.fuel > 0) {
-                this.sprite.setAccelerationY(-2000); 
+                this.sprite.setAccelerationY(-2000);
                 // 100 fuel / 15000ms = 0.0066
-                this.fuel = Math.max(0, this.fuel - (delta * 0.0066)); 
+                this.fuel = Math.max(0, this.fuel - (delta * 0.0066));
             } else {
                 this.sprite.setAccelerationY(0);
             }
@@ -111,21 +111,8 @@ export default class Player {
             this.sprite.setAccelerationY(0);
             // Recharge fuel smoothly (takes 10 seconds to full)
             if (this.sprite.body.touching.down) {
-                this.fuel = Math.min(this.maxFuel, this.fuel + (delta * 0.01)); 
+                this.fuel = Math.min(this.maxFuel, this.fuel + (delta * 0.01));
             }
-        }
-
-        // Tactical Crouch
-        if (this.keys.down.isDown && this.sprite.body.touching.down) {
-            if (!this.isCrouching) {
-                this.isCrouching = true;
-                this.sprite.body.setSize(40, 40);
-                this.sprite.body.setOffset(0, 40);
-            }
-        } else if (!this.keys.down.isDown && this.isCrouching) {
-            this.isCrouching = false;
-            this.sprite.body.setSize(40, 80);
-            this.sprite.body.setOffset(0, 0);
         }
     }
 
@@ -160,7 +147,7 @@ export default class Player {
         if (nearest) {
             // 1. Check if we already have this weapon in ANY slot
             const duplicateSlot = this.weapons.inventory.indexOf(nearest.weaponKey);
-            
+
             if (duplicateSlot !== -1) {
                 // It's a duplicate! Just add ammo and destroy pickup
                 this.weapons.addWeapon(nearest.weaponKey, nearest.ammo);
@@ -194,8 +181,7 @@ export default class Player {
     }
 
     takeDamage(amount) {
-        const finalDamage = this.isCrouching ? amount / 2 : amount;
-        this.health = Math.max(0, this.health - finalDamage);
+        this.health = Math.max(0, this.health - amount);
         this.lastDamageTime = this.scene.time.now;
     }
 
@@ -204,7 +190,7 @@ export default class Player {
         store.setPlayerHealth(this.health);
         store.setPlayerFuel(this.fuel);
         store.setGrenades(this.weapons.grenades);
-        
+
         const slotAmmo = this.weapons.ammo[this.weapons.currentSlot];
         if (this.weapons.inventory[this.weapons.currentSlot]) {
             store.setAmmo(slotAmmo.loaded, slotAmmo.reserve);

@@ -28,7 +28,7 @@ export default class Scene2_Recruitment extends Phaser.Scene {
 
         // Sarge Modular Assembly (Full Body)
         this.sarge = new CharacterAssembler(this, { type: 'sarge' });
-        this.sarge.container.setPosition(-200, height - 160); 
+        this.sarge.container.setPosition(-200, height - 130); 
         
         // Player Modular Assembly (Full Body - Lying down)
         this.player = new CharacterAssembler(this, { type: 'player' });
@@ -128,7 +128,7 @@ export default class Scene2_Recruitment extends Phaser.Scene {
         this.tweens.add({
             targets: this.player.container,
             angle: 0,
-            y: this.cameras.main.height - 160,
+            y: this.cameras.main.height - 130,
             duration: 800,
             ease: 'Back.easeOut',
             onComplete: () => {
