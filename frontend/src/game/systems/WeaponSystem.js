@@ -19,7 +19,7 @@ export default class WeaponSystem {
             smg: { name: 'SMG', damage: 12, range: 5000, muzzleSpeed: 1200, fireRate: 100, magSize: 30, reloadTime: 2000, spread: 0.08, color: 0x00ffff, key: 'smg' },
             rifle: { name: 'Rifle', damage: 20, range: 5000, muzzleSpeed: 1300, fireRate: 100, magSize: 20, reloadTime: 2500, spread: 0.08, color: 0x00ff00, key: 'rifle' },
             sniper: { name: 'Sniper', damage: 85, range: 5000, muzzleSpeed: 2500, fireRate: 1500, magSize: 5, reloadTime: 3500, isTracer: true, color: 0xff00ff, key: 'sniper' },
-            shotgun: { name: 'Shotgun', damage: 10, range: 600, muzzleSpeed: 900, fireRate: 800, magSize: 6, reloadTime: 2500, pellets: 8, spread: 0.3, color: 0xffff00, key: 'shotgun' },
+            shotgun: { name: 'Shotgun', damage: 10, range: 600, muzzleSpeed: 900, fireRate: 800, magSize: 6, reloadTime: 2500, pellets: 8, fanAngle: 30, spread: 0.3, color: 0xffff00, key: 'shotgun' },
             launcher: { name: 'Launcher', damage: 100, range: 5000, muzzleSpeed: 600, fireRate: 2000, magSize: 3, reloadTime: 3000, isRocket: true, color: 0xff4500, key: 'launcher' },
             sarge_smg: { name: 'Sarge SMG', damage: 15, range: 5000, muzzleSpeed: 1200, fireRate: 120, magSize: 50, reloadTime: 2000, spread: 0.05, color: 0xffd700, key: 'sarge_smg' }
         };
