@@ -204,7 +204,7 @@ export default class WeaponSystem {
                         const py = this.owner.y + Math.sin(angle) * d;
                         
                         // Check Walls
-                        const hitWall = this.scene.platforms?.getChildren().find(p => p.getBounds().contains(px, py));
+                        const hitWall = this.scene.platforms?.getTileAtWorldXY(px, py);
                         // Check Enemies
                         const hitEnemy = this.scene.enemies?.getChildren().find(e => e.getBounds().contains(px, py));
                         

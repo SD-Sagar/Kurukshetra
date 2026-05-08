@@ -20,35 +20,76 @@ export default class MainGame extends Phaser.Scene {
         g.clear();
         g.fillStyle(0xFF8800); g.fillRect(0, 0, 10, 10); g.generateTexture('explosion_part', 10, 10);
 
-        // MASSIVE WORLD SCALE
-        const worldWidth = 15000;
-        const worldHeight = 6000;
-        this.physics.world.setBounds(0, 0, worldWidth, worldHeight);
-        this.cameras.main.setBounds(0, 0, worldWidth, worldHeight);
+        // Tiled Map Integration
+        const map = this.make.tilemap({ key: 'map' });
+        
+        // Map Tilesets
+        const bgTileset = map.addTilesetImage('background', 'tileset_background');
+        const mainTileset = map.addTilesetImage('tileset_70', 'tileset_70');
+        const detailsTileset = map.addTilesetImage('Details_18_1', 'Details_18_1');
 
-        // Background
-        this.add.rectangle(0, 0, worldWidth, worldHeight, 0x0f172a).setOrigin(0).setScrollFactor(0.1);
+        // Layers
+        this.backgroundLayer = map.createLayer('Background_Walls', bgTileset, 0, 0);
+        this.platformLayer = map.createLayer('Platforms', [bgTileset, mainTileset], 0, 0);
+        this.detailsLayer = map.createLayer('World_Details', detailsTileset, 0, 0);
+        this.bushesLayer = map.createLayer('Foreground_Bushes', detailsTileset, 0, 0).setDepth(10);
+        this.overlayLayer = map.createLayer('Overlay', detailsTileset, 0, 0).setDepth(20);
 
-        this.platforms = this.physics.add.staticGroup();
-        const floorY = worldHeight - 300;
-        const mainFloor = this.platforms.create(worldWidth / 2, floorY + 100, 'white_square');
-        mainFloor.setDisplaySize(worldWidth, 200);
-        mainFloor.setTint(0x1e293b);
-        mainFloor.refreshBody();
+        // World Bounds from Map
+        this.worldWidth = map.widthInPixels;
+        this.worldHeight = map.heightInPixels;
+        this.physics.world.setBounds(0, 0, this.worldWidth, this.worldHeight);
+        this.cameras.main.setBounds(0, 0, this.worldWidth, this.worldHeight);
 
-        for (let x = 1500; x < worldWidth; x += 2000) {
-            this.createSolidPlatform(x, floorY - 300, 1000, 100);
-            this.createSolidPlatform(x + 500, floorY - 800, 600, 80);
-            this.createSolidPlatform(x - 500, floorY - 1300, 600, 80);
-        }
+        // Collision
+        this.platformLayer.setCollisionByProperty({ collides: true });
+        this.platformLayer.setCollisionByExclusion([-1]); // Fallback: collide with all tiles in this layer
+        this.platforms = this.platformLayer; // For existing collision logic
 
         this.weaponPickups = this.physics.add.group();
         this.enemies = this.physics.add.group();
         this.enemyBullets = this.physics.add.group({ classType: Phaser.Physics.Arcade.Image, runChildUpdate: true });
 
-        // Spawn Entities
-        this.player = new Player(this, worldWidth / 2, floorY - 100);
-        this.sarge = new SargeAI(this, worldWidth / 2 - 150, floorY - 100, this.player);
+        // Spawn Entities from Object Layer
+        const spawnLayer = map.getObjectLayer('Spawns_And_Pickups');
+        let playerSpawn = { x: this.worldWidth / 2, y: this.worldHeight - 300 };
+        let sargeSpawn = { x: this.worldWidth / 2 - 150, y: this.worldHeight - 300 };
+
+        if (spawnLayer) {
+            // First pass: Find player and sarge spawns
+            spawnLayer.objects.forEach(obj => {
+                if (obj.name === 'player_spawn') {
+                    playerSpawn = { x: obj.x, y: obj.y };
+                } else if (obj.name === 'sarge_spawn') {
+                    sargeSpawn = { x: obj.x, y: obj.y };
+                }
+            });
+        }
+
+        // Initialize characters before spawning enemies/loot
+        this.player = new Player(this, playerSpawn.x, playerSpawn.y);
+        this.sarge = new SargeAI(this, sargeSpawn.x, sargeSpawn.y, this.player);
+
+        if (spawnLayer) {
+            // Second pass: Spawn enemies and loot
+            spawnLayer.objects.forEach(obj => {
+                if (obj.name === 'enemy_spawn') {
+                    const enemy = this.enemies.create(obj.x, obj.y, 'white_square');
+                    enemy.body.setSize(40, 80);
+                    enemy.setVisible(false);
+                    enemy.health = 50;
+                    enemy.lastFired = 0;
+                    const keys = ['pistol', 'smg', 'rifle', 'shotgun', 'sniper', 'launcher'];
+                    enemy.weaponKey = keys[Phaser.Math.Between(0, keys.length - 1)];
+                    enemy.weaponStats = this.player.weapons.weaponData[enemy.weaponKey];
+                    enemy.visual = new CharacterAssembler(this, { type: 'enemy' });
+                } else if (obj.name === 'loot_drop') {
+                    const keys = ['pistol', 'smg', 'rifle', 'shotgun', 'sniper', 'launcher'];
+                    const key = keys[Phaser.Math.Between(0, keys.length - 1)];
+                    this.spawnWeaponPickup(obj.x, obj.y, key);
+                }
+            });
+        }
 
         const store = useGameStore.getState();
         this.player.weapons.addWeapon(store.selectedWeapons[0] || 'pistol');
@@ -97,12 +138,7 @@ export default class MainGame extends Phaser.Scene {
         this.time.addEvent({ delay: 3000, callback: this.spawnEnemy, callbackScope: this, loop: true });
     }
 
-    createSolidPlatform(x, y, w, h) {
-        const p = this.platforms.create(x, y, 'white_square');
-        p.setDisplaySize(w, h);
-        p.setTint(0x334155);
-        p.refreshBody();
-    }
+    // Removed createSolidPlatform as it's no longer needed with Tiled map
 
     toggleZoom() {
         this.currentZoomIndex++;
@@ -129,9 +165,10 @@ export default class MainGame extends Phaser.Scene {
 
     spawnEnemy() {
         const cam = this.cameras.main;
-        const worldWidth = 15000;
         const spawnX = Math.random() > 0.5 ? cam.scrollX - 400 : cam.scrollX + cam.width + 400;
-        const enemy = this.enemies.create(Phaser.Math.Clamp(spawnX, 200, worldWidth - 200), 5000, 'white_square');
+        // Spawn slightly above the middle of the map or near player's Y
+        const spawnY = this.player ? this.player.sprite.y - 500 : this.worldHeight / 2;
+        const enemy = this.enemies.create(Phaser.Math.Clamp(spawnX, 200, this.worldWidth - 200), spawnY, 'white_square');
         enemy.body.setSize(40, 80);
         enemy.setVisible(false);
         enemy.health = 50;
@@ -193,7 +230,7 @@ export default class MainGame extends Phaser.Scene {
                         const px = enemy.x + Math.cos(angle) * d;
                         const py = enemy.y + Math.sin(angle) * d;
 
-                        const hitWall = this.platforms?.getChildren().find(p => p.getBounds().contains(px, py));
+                        const hitWall = this.platformLayer.getTileAtWorldXY(px, py, true)?.canCollide;
                         const hitPlayer = this.player.sprite.getBounds().contains(px, py);
                         const hitSarge = this.sarge.sprite.getBounds().contains(px, py);
 
