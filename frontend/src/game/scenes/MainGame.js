@@ -25,15 +25,13 @@ export default class MainGame extends Phaser.Scene {
         
         // Map Tilesets
         const bgTileset = map.addTilesetImage('background', 'tileset_background');
-        const mainTileset = map.addTilesetImage('tileset_70', 'tileset_70');
-        const detailsTileset = map.addTilesetImage('Details_18_1', 'Details_18_1');
+        const mainTileset = map.addTilesetImage('tileset_70', 'tileset_70', 70, 70, 0, 2);
 
         // Layers
         this.backgroundLayer = map.createLayer('Background_Walls', bgTileset, 0, 0);
         this.platformLayer = map.createLayer('Platforms', [bgTileset, mainTileset], 0, 0);
-        this.detailsLayer = map.createLayer('World_Details', detailsTileset, 0, 0);
-        this.bushesLayer = map.createLayer('Foreground_Bushes', detailsTileset, 0, 0).setDepth(10);
-        this.overlayLayer = map.createLayer('Overlay', detailsTileset, 0, 0).setDepth(20);
+        this.bushesLayer = map.createLayer('Foreground_Bushes', [bgTileset, mainTileset], 0, 0).setDepth(10);
+        this.overlayLayer = map.createLayer('Overlay', [bgTileset, mainTileset], 0, 0).setDepth(20);
 
         // World Bounds from Map
         this.worldWidth = map.widthInPixels;
@@ -318,6 +316,12 @@ export default class MainGame extends Phaser.Scene {
         const pointer = this.input.activePointer;
         this.player.update(time, delta, pointer);
         this.sarge.update(time, delta, this.enemies);
+
+        // Hiding Mechanic (Foreground Bushes)
+        if (this.bushesLayer) {
+            const isHidden = this.bushesLayer.getTileAtWorldXY(this.player.sprite.x, this.player.sprite.y);
+            this.player.visual.container.setAlpha(isHidden ? 0.5 : 1.0);
+        }
 
         this.enemies.getChildren().forEach(enemy => {
             if (enemy && enemy.active && enemy.body) {
