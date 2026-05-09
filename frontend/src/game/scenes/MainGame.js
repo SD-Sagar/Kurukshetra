@@ -29,9 +29,22 @@ export default class MainGame extends Phaser.Scene {
 
         // Layers
         this.backgroundLayer = map.createLayer('Background_Walls', bgTileset, 0, 0);
+        this.backgroundDetailsLayer = map.createLayer('Background_Details', bgTileset, 0, 0);
         this.platformLayer = map.createLayer('Platforms', [bgTileset, mainTileset], 0, 0);
         this.bushesLayer = map.createLayer('Foreground_Bushes', [bgTileset, mainTileset], 0, 0).setDepth(10);
         this.overlayLayer = map.createLayer('Overlay', [bgTileset, mainTileset], 0, 0).setDepth(20);
+
+        // Physics Details (Object Layer for curved edges)
+        this.physicsDetails = this.physics.add.staticGroup();
+        const details = map.createFromObjects('Physics_Details', {
+            name: '',
+            key: 'background'
+        });
+        details.forEach(detail => {
+            detail.setDepth(5);
+            detail.setVisible(false); // Hide the visual confirmation blocks
+            this.physicsDetails.add(detail);
+        });
 
         // World Bounds from Map
         this.worldWidth = map.widthInPixels;
@@ -99,21 +112,21 @@ export default class MainGame extends Phaser.Scene {
         }
 
         // Colliders
-        this.physics.add.collider(this.player.sprite, this.platforms);
-        this.physics.add.collider(this.sarge.sprite, this.platforms);
-        this.physics.add.collider(this.enemies, this.platforms);
-        this.physics.add.collider(this.weaponPickups, this.platforms);
+        this.physics.add.collider(this.player.sprite, [this.platforms, this.physicsDetails]);
+        this.physics.add.collider(this.sarge.sprite, [this.platforms, this.physicsDetails]);
+        this.physics.add.collider(this.enemies, [this.platforms, this.physicsDetails]);
+        this.physics.add.collider(this.weaponPickups, [this.platforms, this.physicsDetails]);
 
-        this.physics.add.collider(this.player.weapons.bullets, this.platforms, (b) => {
+        this.physics.add.collider(this.player.weapons.bullets, [this.platforms, this.physicsDetails], (b) => {
             if (b.isRocket) b.onImpact(); else b.destroy();
         });
-        this.physics.add.collider(this.sarge.weapons.bullets, this.platforms, (b) => {
+        this.physics.add.collider(this.sarge.weapons.bullets, [this.platforms, this.physicsDetails], (b) => {
             if (b.isRocket) b.onImpact(); else b.destroy();
         });
-        this.physics.add.collider(this.enemyBullets, this.platforms, (b) => {
+        this.physics.add.collider(this.enemyBullets, [this.platforms, this.physicsDetails], (b) => {
             if (b.isRocket) b.onImpact(); else b.destroy();
         });
-        this.physics.add.collider(this.player.weapons.grenadeGroup, this.platforms);
+        this.physics.add.collider(this.player.weapons.grenadeGroup, [this.platforms, this.physicsDetails]);
         this.physics.add.collider(this.player.weapons.grenadeGroup, this.enemies);
 
         this.physics.add.overlap(this.player.weapons.bullets, this.enemies, this.bulletHitEnemy, null, this);
