@@ -102,16 +102,22 @@ export default class Player {
         if (this.keys.space.isDown || this.keys.up.isDown) {
             if (this.fuel > 0) {
                 this.sprite.setAccelerationY(-2000);
-                // 100 fuel / 15000ms = 0.0066
                 this.fuel = Math.max(0, this.fuel - (delta * 0.0066));
             } else {
                 this.sprite.setAccelerationY(0);
             }
         } else {
             this.sprite.setAccelerationY(0);
-            // Recharge fuel smoothly (takes 10 seconds to full)
-            if (this.sprite.body.touching.down) {
-                this.fuel = Math.min(this.maxFuel, this.fuel + (delta * 0.01));
+            // Recharge fuel
+            // We check both 'touching' (objects) and 'blocked' (tiles/world bounds)
+            const isOnGround = this.sprite.body.touching.down || this.sprite.body.blocked.down;
+            
+            if (isOnGround) {
+                // Rapid recharge on ground (Full in ~5 seconds)
+                this.fuel = Math.min(this.maxFuel, this.fuel + (delta * 0.02));
+            } else {
+                // Slow "air-drip" recharge while falling (Full in ~50 seconds)
+                this.fuel = Math.min(this.maxFuel, this.fuel + (delta * 0.002));
             }
         }
     }

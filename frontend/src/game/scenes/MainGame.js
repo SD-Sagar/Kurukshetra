@@ -50,6 +50,7 @@ export default class MainGame extends Phaser.Scene {
         this.worldWidth = map.widthInPixels;
         this.worldHeight = map.heightInPixels;
         this.physics.world.setBounds(0, 0, this.worldWidth, this.worldHeight);
+        this.physics.world.TILE_BIAS = 40; // High precision for high speeds
         this.cameras.main.setBounds(0, 0, this.worldWidth, this.worldHeight);
 
         // Collision
@@ -140,24 +141,47 @@ export default class MainGame extends Phaser.Scene {
 
         // Zoom
         this.currentZoomIndex = 0;
-        this.uiZoomLevels = [1, 2, 4];
-        this.baseZoom = 0.66;
-        this.cameras.main.setZoom(this.baseZoom);
+        this.uiZoomLevels = [1, 2, 4]; // 1x, 2x, 4x of base
+        this.updateBaseZoom();
+        this.applyCurrentZoom();
+        
+        // Re-calculate on window resize
+        this.scale.on('resize', () => {
+            this.updateBaseZoom();
+            this.applyCurrentZoom();
+        });
+
         this.input.keyboard.on('keydown-Z', () => this.toggleZoom());
 
         // Enemy Spawner
         this.time.addEvent({ delay: 3000, callback: this.spawnEnemy, callbackScope: this, loop: true });
     }
 
-    // Removed createSolidPlatform as it's no longer needed with Tiled map
+    updateBaseZoom() {
+        // Calculate the minimum zoom required to fill the entire screen
+        const widthZoom = this.scale.width / this.worldWidth;
+        const heightZoom = this.scale.height / this.worldHeight;
+        // Max ensures we cover the smaller dimension completely
+        this.baseZoom = Math.max(widthZoom, heightZoom);
+    }
+
+    applyCurrentZoom(instant = true) {
+        const uiLabel = this.uiZoomLevels[this.currentZoomIndex];
+        // 1x = Close (baseZoom * 4), 4x = Far (baseZoom * 1)
+        const targetZoom = this.baseZoom * (4 / uiLabel);
+        if (instant) {
+            this.cameras.main.setZoom(targetZoom);
+        } else {
+            this.cameras.main.zoomTo(targetZoom, 300, 'Power2');
+        }
+    }
 
     toggleZoom() {
         this.currentZoomIndex++;
         if (this.currentZoomIndex >= this.uiZoomLevels.length) this.currentZoomIndex = 0;
         const uiLabel = this.uiZoomLevels[this.currentZoomIndex];
-        const targetZoom = this.baseZoom / uiLabel;
         useGameStore.getState().setZoomLevel(uiLabel);
-        this.cameras.main.zoomTo(targetZoom, 300, 'Power2');
+        this.applyCurrentZoom(false);
     }
 
     spawnWeaponPickup(x, y, weaponKey, ammo = null) {
@@ -178,7 +202,10 @@ export default class MainGame extends Phaser.Scene {
         const cam = this.cameras.main;
         const spawnX = Math.random() > 0.5 ? cam.scrollX - 400 : cam.scrollX + cam.width + 400;
         // Spawn slightly above the middle of the map or near player's Y
-        const spawnY = this.player ? this.player.sprite.y - 500 : this.worldHeight / 2;
+        let spawnY = this.player ? this.player.sprite.y - 500 : this.worldHeight / 2;
+        // Keep within playable Y range (Don't spawn on the roof or below the level)
+        spawnY = Phaser.Math.Clamp(spawnY, 800, this.worldHeight - 500);
+
         const enemy = this.enemies.create(Phaser.Math.Clamp(spawnX, 200, this.worldWidth - 200), spawnY, 'white_square');
         enemy.body.setSize(40, 80);
         enemy.setVisible(false);
