@@ -120,11 +120,6 @@ export default class Player {
         const isJumping = this.keys.space.isDown || this.keys.up.isDown;
         
         if (isJumping && this.fuel > 0) {
-            // Ignition Shake (only when starting)
-            if (this.sprite.body.acceleration.y === 0) {
-                this.scene.cameras.main.shake(100, 0.002);
-            }
-
             this.sprite.setAccelerationY(-2000);
             this.fuel = Math.max(0, this.fuel - (delta * 0.0066));
             

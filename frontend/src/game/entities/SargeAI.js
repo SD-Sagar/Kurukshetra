@@ -3,9 +3,10 @@ import WeaponSystem from '../systems/WeaponSystem';
 import CharacterAssembler from '../utils/CharacterAssembler';
 
 export default class SargeAI {
-    constructor(scene, x, y, player) {
+    constructor(scene, x, y, player, pathfinder) {
         this.scene = scene;
         this.player = player;
+        this.pathfinder = pathfinder;
 
         // 1. Create the Visual Assembly
         this.visual = new CharacterAssembler(scene, { type: 'sarge' });
@@ -48,11 +49,13 @@ export default class SargeAI {
         this.isEvading = false;
         this.evadeTimer = 0;
 
-        // Situational Awareness
-        this.verticalCommitTimer = 0;
-        this.ledgeSearchDirection = null;
         this.lastProgressCheck = 0;
         this.lastDistToPlayer = 9999;
+
+        // Pathfinding State
+        this.path = [];
+        this.currentPathIndex = 0;
+        this.lastPathUpdate = 0;
     }
 
     say(text, duration = 3000) {
@@ -138,63 +141,56 @@ export default class SargeAI {
         let targetX = playerSprite.x + this.targetXOffset;
         let targetY = playerSprite.y + this.targetYOffset;
 
-        const accel = 800;
+        // --- A* PATHFOLLOWING ---
+        // Recalculate path every 300ms (Sarge is faster than enemies)
+        if (time > this.lastPathUpdate + 300) {
+            const newPath = this.pathfinder.findPath(this.sprite.x, this.sprite.y, targetX, targetY);
+            if (newPath) {
+                this.path = newPath;
+                this.currentPathIndex = 0;
+            }
+            this.lastPathUpdate = time;
+        }
+
+        // Determine current target point (Waypoint or direct player)
+        let moveTarget = { x: targetX, y: targetY };
+        if (this.path && this.path.length > 0 && this.currentPathIndex < this.path.length) {
+            moveTarget = this.path[this.currentPathIndex];
+            
+            // Check if we reached the waypoint (Higher distance to "cut corners")
+            const distToWaypoint = Phaser.Math.Distance.Between(this.sprite.x, this.sprite.y, moveTarget.x, moveTarget.y);
+            if (distToWaypoint < 60) {
+                this.currentPathIndex++;
+            }
+        }
+
+        const accel = 1100; // Boosted Hero Acceleration
         const isBlockedSide = this.sprite.body.blocked.left || this.sprite.body.blocked.right;
         const isBlockedUp = this.sprite.body.blocked.up;
-        const isBlockedDown = this.sprite.body.blocked.down;
         const isBelowPlayer = this.sprite.y > playerSprite.y + 60;
-        const isAbovePlayer = this.sprite.y < playerSprite.y - 100;
 
-        // --- AWARENESS: Wall Scaling Commitment ---
-        if (isBlockedSide && isBelowPlayer && time > this.verticalCommitTimer) {
-            this.verticalCommitTimer = time + 1200; // Commit to climbing for 1.2s
-        }
-
-        // --- AWARENESS: Ledge Search (Drop Down) ---
-        if (isAbovePlayer && isBlockedDown) {
-            if (!this.ledgeSearchDirection) this.ledgeSearchDirection = (this.sprite.x < playerSprite.x) ? 1 : -1;
-            this.sprite.setAccelerationX(accel * 1.5 * this.ledgeSearchDirection);
+        // --- MOVEMENT EXECUTION ---
+        if (this.isEvading) {
+            this.sprite.setAccelerationX(accel * 2.5 * this.evadeDir);
+            this.sprite.setAccelerationY(-2400); 
+            if (time % 100 < 40) this.jetpackParticles.emitParticleAt(this.sprite.x, this.sprite.y + 40);
         } else {
-            this.ledgeSearchDirection = null;
-
-            // Panic Evade
-            if (this.isEvading) {
-                this.sprite.setAccelerationX(accel * 1.6 * this.evadeDir);
-                this.sprite.setAccelerationY(Math.random() > 0.3 ? -2200 : 0);
-            } 
-            // Gap Search (Up)
-            else if (isBelowPlayer && isBlockedUp) {
-                if (!this.searchDirection) this.searchDirection = Math.random() > 0.5 ? 1 : -1;
-                this.sprite.setAccelerationX(accel * 1.2 * this.searchDirection);
-            } 
-            // Standard Follow
-            else {
-                this.searchDirection = null;
-                if (Math.abs(this.sprite.x - targetX) > 40) {
-                    this.sprite.setAccelerationX(this.sprite.x < targetX ? accel : -accel);
-                } else {
-                    this.sprite.setAccelerationX(0);
-                }
+            // Horizontal Follow Waypoint
+            const dx = moveTarget.x - this.sprite.x;
+            if (Math.abs(dx) > 10) {
+                this.sprite.setAccelerationX(dx > 0 ? accel : -accel);
+            } else {
+                this.sprite.setAccelerationX(0);
+                this.sprite.setVelocityX(this.sprite.body.velocity.x * 0.9);
             }
-        }
 
-        // Vertical Movement
-        if (!this.isEvading) {
+            // Vertical Follow Waypoint
             let thrustPower = 0;
-            // High Priority: Wall Scaling Commitment
-            if (time < this.verticalCommitTimer && !isBlockedUp) {
-                thrustPower = 2000;
-            }
-            // Normal: Fly to player
-            else if (this.sprite.y > targetY + 20) {
-                if (!isBlockedUp) {
-                    const distY = Math.abs(this.sprite.y - targetY);
-                    thrustPower = Math.min(2200, 1000 + distY * 5);
-                }
-            } 
-            // Obstacle Hop
-            else if (isBlockedSide && (isBlockedDown || isBelowPlayer)) {
-                thrustPower = 1800;
+            if (this.sprite.y > moveTarget.y + 20 && !isBlockedUp) {
+                const dy = Math.abs(this.sprite.y - moveTarget.y);
+                thrustPower = Math.min(2200, 1000 + dy * 5);
+            } else if (isBlockedSide && !isBlockedUp) {
+                thrustPower = 1800; // Hop over obstacles
             }
 
             if (thrustPower > 0) {

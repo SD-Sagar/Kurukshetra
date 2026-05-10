@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import Player from '../entities/Player';
 import SargeAI from '../entities/SargeAI';
 import CharacterAssembler from '../utils/CharacterAssembler';
+import Pathfinder from '../utils/Pathfinder';
 import { useGameStore } from '../../store/gameStore';
 
 export default class MainGame extends Phaser.Scene {
@@ -58,6 +59,9 @@ export default class MainGame extends Phaser.Scene {
         this.platformLayer.setCollisionByExclusion([-1]); // Fallback: collide with all tiles in this layer
         this.platforms = this.platformLayer; // For existing collision logic
 
+        // Initialize Pathfinding (The "Map Knowledge")
+        this.pathfinder = new Pathfinder(this, map, this.platformLayer);
+
         this.weaponPickups = this.physics.add.group();
         this.enemies = this.physics.add.group();
         this.enemyBullets = this.physics.add.group({ classType: Phaser.Physics.Arcade.Image, runChildUpdate: true });
@@ -93,7 +97,7 @@ export default class MainGame extends Phaser.Scene {
 
         // Initialize characters before spawning enemies/loot
         this.player = new Player(this, playerSpawn.x, playerSpawn.y);
-        this.sarge = new SargeAI(this, sargeSpawn.x, sargeSpawn.y, this.player);
+        this.sarge = new SargeAI(this, sargeSpawn.x, sargeSpawn.y, this.player, this.pathfinder);
 
         if (spawnLayer) {
             // Second pass: Spawn enemies and loot
@@ -231,6 +235,11 @@ export default class MainGame extends Phaser.Scene {
         enemy.ledgeSearchDirection = null;
         enemy.lastProgressCheck = 0;
         enemy.lastDistToPlayer = 9999;
+
+        // Pathfinding State
+        enemy.path = [];
+        enemy.currentPathIndex = 0;
+        enemy.lastPathUpdate = 0;
 
         const keys = ['pistol', 'smg', 'rifle', 'shotgun', 'sniper', 'launcher', 'machinegun', 'tacticalshotgun'];
         enemy.weaponKey = keys[Phaser.Math.Between(0, keys.length - 1)];
@@ -410,14 +419,28 @@ export default class MainGame extends Phaser.Scene {
             else enemy.stuckTime = 0;
             enemy.lastX = enemy.x; enemy.lastY = enemy.y;
 
-            // Progress Monitor (Reroute if no progress in 2s)
-            if (time > enemy.lastProgressCheck + 2000) {
-                if (distToPlayer > enemy.lastDistToPlayer - 10 && distToPlayer > 300) {
-                    enemy.searchDirection = Math.random() > 0.5 ? 1 : -1; // Force a re-route
-                    enemy.stuckTime = 1100; // Trigger an evade to break loop
+            // --- A* PATHFINDING UPDATE ---
+            // Recalculate path every 1s (Staggered by enemy index to prevent spikes)
+            const pathUpdateInterval = 1000;
+            if (time > enemy.lastPathUpdate + pathUpdateInterval) {
+                const newPath = this.pathfinder.findPath(enemy.x, enemy.y, this.player.sprite.x, this.player.sprite.y);
+                if (newPath) {
+                    enemy.path = newPath;
+                    enemy.currentPathIndex = 0;
                 }
-                enemy.lastDistToPlayer = distToPlayer;
-                enemy.lastProgressCheck = time;
+                enemy.lastPathUpdate = time + (Math.random() * 200); // Stagger next update
+            }
+
+            // Determine moveTarget (Waypoint vs Direct Player)
+            let moveTarget = { x: this.player.sprite.x, y: this.player.sprite.y };
+            if (enemy.path && enemy.path.length > 0 && enemy.currentPathIndex < enemy.path.length) {
+                moveTarget = enemy.path[enemy.currentPathIndex];
+                
+                // Advance waypoint if close
+                const distToWaypoint = Phaser.Math.Distance.Between(enemy.x, enemy.y, moveTarget.x, moveTarget.y);
+                if (distToWaypoint < 40) {
+                    enemy.currentPathIndex++;
+                }
             }
 
             // Trigger Panic Evade
@@ -435,59 +458,45 @@ export default class MainGame extends Phaser.Scene {
             if (enemy.weaponKey === 'shotgun' || enemy.weaponKey === 'smg') idealDist = 100;
 
             const accel = 600;
-            const isBlockedDown = enemy.body.blocked.down;
-            const isAbovePlayer = enemy.y < this.player.sprite.y - 100;
             
-            // --- AWARENESS: Wall Scaling Commitment ---
-            if (isBlockedSide && isBelowPlayer && time > enemy.verticalCommitTimer) {
-                enemy.verticalCommitTimer = time + 1200;
-            }
-
-            // --- MOVEMENT OVERRIDE: PANIC EVADE ---
+            // --- MOVEMENT EXECUTION ---
             if (enemy.isEvading) {
-                enemy.setAccelerationX(accel * 1.8 * enemy.evadeDir);
-                enemy.setAccelerationY(Math.random() > 0.3 ? -2200 : 0);
+                enemy.setAccelerationX(accel * 2.5 * enemy.evadeDir);
+                enemy.setAccelerationY(-2400); 
                 if (time % 100 < 40) this.enemyJetpackParticles.emitParticleAt(enemy.x, enemy.y + 40);
             }
-            // --- AWARENESS: Ledge Search (Drop Down) ---
-            else if (isAbovePlayer && isBlockedDown) {
-                if (!enemy.ledgeSearchDirection) enemy.ledgeSearchDirection = (enemy.x < this.player.sprite.x) ? 1 : -1;
-                enemy.setAccelerationX(accel * 1.5 * enemy.ledgeSearchDirection);
-            }
-            // --- GAP SEARCH (Up) ---
-            else if (isBelowPlayer && isBlockedUp) {
-                enemy.ledgeSearchDirection = null;
-                if (!enemy.searchDirection) enemy.searchDirection = Math.random() > 0.5 ? 1 : -1;
-                enemy.setAccelerationX(accel * 1.5 * enemy.searchDirection);
-            } 
-            // --- STANDARD FOLLOW ---
             else {
-                enemy.ledgeSearchDirection = null;
-                enemy.searchDirection = null;
-                if (distToPlayer > idealDist + 50) {
-                    enemy.setAccelerationX(this.player.sprite.x < enemy.x ? -accel : accel);
-                } else if (distToPlayer < idealDist - 50 && enemy.weaponKey !== 'smg') {
-                    enemy.setAccelerationX(this.player.sprite.x < enemy.x ? accel : -accel);
+                // Horizontal Move to Target
+                const dx = moveTarget.x - enemy.x;
+                const distToTarget = Math.abs(dx);
+                
+                // If pathfinding, move to waypoint. If reached end, use tactical distance.
+                const isPathing = enemy.path && enemy.currentPathIndex < enemy.path.length;
+                
+                if (isPathing) {
+                    if (distToTarget > 10) {
+                        enemy.setAccelerationX(dx > 0 ? accel : -accel);
+                    } else {
+                        enemy.setAccelerationX(0);
+                    }
                 } else {
-                    enemy.setAccelerationX(0);
+                    // Tactical Distance Logic (Player is moveTarget here)
+                    if (distToPlayer > idealDist + 50) {
+                        enemy.setAccelerationX(this.player.sprite.x < enemy.x ? -accel : accel);
+                    } else if (distToPlayer < idealDist - 50 && enemy.weaponKey !== 'smg') {
+                        enemy.setAccelerationX(this.player.sprite.x < enemy.x ? accel : -accel);
+                    } else {
+                        enemy.setAccelerationX(0);
+                    }
                 }
-            }
 
-            // Vertical Logic (Smart Jetpack)
-            if (!enemy.isEvading) {
+                // Vertical Logic (Smart Jetpack to Target)
                 let thrustPower = 0;
-                // Priority 1: Wall Climb Commitment
-                if (time < enemy.verticalCommitTimer && !isBlockedUp) {
-                    thrustPower = 2000;
-                }
-                // Priority 2: Standard Chasing
-                else if (enemy.y > this.player.sprite.y + 50 && !isBlockedUp) {
-                    const distY = Math.abs(enemy.y - this.player.sprite.y);
-                    thrustPower = Math.min(2200, 1000 + distY * 5);
-                }
-                // Priority 3: Obstacle Hop
-                else if (isBlockedSide && (isBlockedDown || isBelowPlayer)) {
-                    thrustPower = 1800;
+                if (enemy.y > moveTarget.y + 20 && !isBlockedUp) {
+                    const dy = Math.abs(enemy.y - moveTarget.y);
+                    thrustPower = Math.min(2200, 1000 + dy * 5);
+                } else if (isBlockedSide && !isBlockedUp) {
+                    thrustPower = 1800; // Hop
                 }
 
                 if (thrustPower > 0) {
