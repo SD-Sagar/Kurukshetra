@@ -25,7 +25,7 @@ export default class CharacterAssembler {
 
         // Grenade Belt (Visual Only)
         this.grenadeBelt = this.scene.add.sprite(0, 15, 'grenade');
-        this.grenadeBelt.setDisplaySize(22, 22);
+        this.grenadeBelt.setDisplaySize(33, 33); // Increased by 50% (22 -> 33)
         this.grenadeBelt.setVisible(this.type === 'player');
 
         this.head.setOrigin(0.5, 0.95);
@@ -47,6 +47,11 @@ export default class CharacterAssembler {
 
         this.walkCycle = 0;
         this.currentWeaponColor = null;
+        this.meleeOffset = 0;
+        
+        // Slash Visual
+        this.slashGraphics = this.scene.add.graphics();
+        this.container.add(this.slashGraphics);
     }
 
     update(time, delta, velocityX, isCrouching = false, weaponColor = null, grenades = 0) {
@@ -148,8 +153,11 @@ export default class CharacterAssembler {
             // The arm points "Down" at 0 rotation, so we add PI/2 to get the pointing vector
             const armAngle = this.armFront.rotation + Math.PI / 2;
 
-            this.weapon.x = this.armFront.x + Math.cos(armAngle) * armVisualLength;
-            this.weapon.y = this.armFront.y + Math.sin(armAngle) * armVisualLength;
+            // Apply melee offset (lunge)
+            const weaponDist = armVisualLength + this.meleeOffset;
+
+            this.weapon.x = this.armFront.x + Math.cos(armAngle) * weaponDist;
+            this.weapon.y = this.armFront.y + Math.sin(armAngle) * weaponDist;
 
             // Align gun barrel with the arm direction
             // Subtracting PI/2 because handle is on the Right (0.85) and barrel is on the Left
@@ -158,7 +166,8 @@ export default class CharacterAssembler {
             // Universal 'Right-Side Up' Fix:
             // Since the PNG points Left, rotating it 180 to face forward makes it upside down.
             // We set scaleY to -1 to flip it back to being right-side up.
-            this.weapon.setScale(1, -1);
+            // Increased scale for 'Impressive' look
+            this.weapon.setScale(1.25, -1.25);
         }
     }
 
@@ -189,7 +198,53 @@ export default class CharacterAssembler {
         return { x: spawnX, y: spawnY };
     }
 
+    playMeleeAnimation() {
+        if (this.meleeTween) this.meleeTween.stop();
+
+        // 1. Physical Lunge (Tween the offset)
+        this.meleeTween = this.scene.tweens.add({
+            targets: this,
+            meleeOffset: 35,
+            duration: 80,
+            yoyo: true,
+            ease: 'Cubic.easeOut',
+            onComplete: () => {
+                this.meleeTween = null;
+                this.meleeOffset = 0;
+            }
+        });
+
+        // 2. Visual Slash Arc
+        this.drawSlash();
+    }
+
+    drawSlash() {
+        this.slashGraphics.clear();
+        this.slashGraphics.lineStyle(4, 0xffffff, 0.8);
+        
+        // Draw an arc in front of the hand
+        const armAngle = this.armFront.rotation + Math.PI/2;
+        const startAngle = Phaser.Math.RadToDeg(armAngle - 0.8);
+        const endAngle = Phaser.Math.RadToDeg(armAngle + 0.8);
+        
+        this.slashGraphics.beginPath();
+        this.slashGraphics.arc(this.weapon.x, this.weapon.y, 40, Phaser.Math.DegToRad(startAngle), Phaser.Math.DegToRad(endAngle), false);
+        this.slashGraphics.strokePath();
+
+        this.scene.tweens.add({
+            targets: this.slashGraphics,
+            alpha: 0,
+            duration: 150,
+            onComplete: () => {
+                this.slashGraphics.clear();
+                this.slashGraphics.alpha = 1;
+            }
+        });
+    }
+
     destroy() {
+        if (this.meleeTween) this.meleeTween.stop();
+        if (this.slashGraphics) this.slashGraphics.destroy();
         this.container.destroy();
     }
 }

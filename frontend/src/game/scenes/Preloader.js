@@ -76,6 +76,10 @@ export default class Preloader extends Phaser.Scene {
         this.load.image('grenade', 'assets/weapons/grenade.png');
         this.load.image('rocket', 'assets/weapons/rocket.png');
         this.load.image('sarge_smg', 'assets/weapons/sarge_smg.png');
+        this.load.image('dagger', 'assets/weapons/dagger.png');
+        this.load.image('machinegun', 'assets/weapons/machinegun.png');
+        this.load.image('tacticalshotgun', 'assets/weapons/tacticalshotgun.png');
+        this.load.image('bullet', 'assets/weapons/bullet.png');
 
         // Map Assets
         this.load.tilemapTiledJSON('map', 'assets/maps/map.json');

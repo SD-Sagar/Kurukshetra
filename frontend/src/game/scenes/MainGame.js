@@ -62,6 +62,19 @@ export default class MainGame extends Phaser.Scene {
         this.enemies = this.physics.add.group();
         this.enemyBullets = this.physics.add.group({ classType: Phaser.Physics.Arcade.Image, runChildUpdate: true });
 
+        // Enemy Jetpack Particles (Red)
+        this.enemyJetpackParticles = this.add.particles(0, 0, 'bullet_player', {
+            speed: { min: 50, max: 150 },
+            angle: { min: 80, max: 100 },
+            scale: { start: 1.0, end: 0 },
+            lifespan: 300,
+            gravityY: 400,
+            frequency: -1,
+            tint: 0xff3333,
+            blendMode: 'ADD'
+        });
+        this.enemyJetpackParticles.setDepth(5);
+
         // Spawn Entities from Object Layer
         const spawnLayer = map.getObjectLayer('Spawns_And_Pickups');
         let playerSpawn = { x: this.worldWidth / 2, y: this.worldHeight - 300 };
@@ -86,17 +99,9 @@ export default class MainGame extends Phaser.Scene {
             // Second pass: Spawn enemies and loot
             spawnLayer.objects.forEach(obj => {
                 if (obj.name === 'enemy_spawn') {
-                    const enemy = this.enemies.create(obj.x, obj.y, 'white_square');
-                    enemy.body.setSize(40, 80);
-                    enemy.setVisible(false);
-                    enemy.health = 50;
-                    enemy.lastFired = 0;
-                    const keys = ['pistol', 'smg', 'rifle', 'shotgun', 'sniper', 'launcher'];
-                    enemy.weaponKey = keys[Phaser.Math.Between(0, keys.length - 1)];
-                    enemy.weaponStats = this.player.weapons.weaponData[enemy.weaponKey];
-                    enemy.visual = new CharacterAssembler(this, { type: 'enemy' });
+                    this.spawnEnemyAt(obj.x, obj.y);
                 } else if (obj.name === 'loot_drop') {
-                    const keys = ['pistol', 'smg', 'rifle', 'shotgun', 'sniper', 'launcher'];
+                    const keys = ['pistol', 'smg', 'rifle', 'shotgun', 'sniper', 'launcher', 'machinegun', 'tacticalshotgun'];
                     const key = keys[Phaser.Math.Between(0, keys.length - 1)];
                     this.spawnWeaponPickup(obj.x, obj.y, key);
                 }
@@ -105,6 +110,7 @@ export default class MainGame extends Phaser.Scene {
 
         const store = useGameStore.getState();
         this.player.weapons.addWeapon(store.selectedWeapons[0] || 'pistol');
+        this.player.weapons.addWeapon('dagger');
 
         if (store.userProfile && !store.isNewGame) {
             this.time.delayedCall(1500, () => {
@@ -199,20 +205,34 @@ export default class MainGame extends Phaser.Scene {
     }
 
     spawnEnemy() {
+        if (this.enemies.countActive() >= 10) return;
         const cam = this.cameras.main;
         const spawnX = Math.random() > 0.5 ? cam.scrollX - 400 : cam.scrollX + cam.width + 400;
-        // Spawn slightly above the middle of the map or near player's Y
         let spawnY = this.player ? this.player.sprite.y - 500 : this.worldHeight / 2;
-        // Keep within playable Y range (Don't spawn on the roof or below the level)
-        spawnY = Phaser.Math.Clamp(spawnY, 800, this.worldHeight - 500);
+        this.spawnEnemyAt(Phaser.Math.Clamp(spawnX, 200, this.worldWidth - 200), Phaser.Math.Clamp(spawnY, 800, this.worldHeight - 500));
+    }
 
-        const enemy = this.enemies.create(Phaser.Math.Clamp(spawnX, 200, this.worldWidth - 200), spawnY, 'white_square');
-        enemy.body.setSize(40, 80);
+    spawnEnemyAt(x, y) {
+        const enemy = this.enemies.create(x, y, 'white_square');
+        enemy.body.setSize(40, 80).setDragX(600).setMaxVelocity(400, 1000);
         enemy.setVisible(false);
         enemy.health = 50;
         enemy.lastFired = 0;
+        enemy.lastX = x;
+        enemy.lastY = y;
+        enemy.stuckTime = 0;
+        enemy.searchDirection = null;
+        enemy.isEvading = false;
+        enemy.evadeTimer = 0;
+        enemy.evadeDir = 1;
 
-        const keys = ['pistol', 'smg', 'rifle', 'shotgun', 'sniper', 'launcher'];
+        // Situational Awareness
+        enemy.verticalCommitTimer = 0;
+        enemy.ledgeSearchDirection = null;
+        enemy.lastProgressCheck = 0;
+        enemy.lastDistToPlayer = 9999;
+
+        const keys = ['pistol', 'smg', 'rifle', 'shotgun', 'sniper', 'launcher', 'machinegun', 'tacticalshotgun'];
         enemy.weaponKey = keys[Phaser.Math.Between(0, keys.length - 1)];
         enemy.weaponStats = this.player.weapons.weaponData[enemy.weaponKey];
         enemy.visual = new CharacterAssembler(this, { type: 'enemy' });
@@ -243,10 +263,20 @@ export default class MainGame extends Phaser.Scene {
                     b.body.setSize(stats.isRocket ? 16 : 8, 8);
                 }
 
+                // USE NEW BULLET PNG FOR ENEMIES TOO
+                const useBulletPng = ['pistol', 'rifle', 'smg', 'machinegun'].includes(stats.key);
+                if (useBulletPng) {
+                    b.setTexture('bullet');
+                    b.setRotation(angle + Math.PI); // Faces Left in PNG
+                    b.setDisplaySize(20, 10);
+                } else {
+                    b.setRotation(angle);
+                }
+
                 if (stats.isRocket) {
                     b.setRotation(angle);
                     b.setTexture('rocket');
-                    b.setDisplaySize(30, 15);
+                    b.setDisplaySize(45, 22); // LARGER ROCKET
                     b.setTint(0xffffff);
                     b.isRocket = true;
                     b.onImpact = () => {
@@ -302,7 +332,7 @@ export default class MainGame extends Phaser.Scene {
             }
         };
 
-        if (enemy.weaponKey === 'shotgun') {
+        if (enemy.weaponKey && enemy.weaponKey.includes('shotgun')) {
             const spreadRad = Phaser.Math.DegToRad(stats.fanAngle);
             const step = spreadRad / (stats.pellets - 1);
             const startAngle = baseAngle - (spreadRad / 2);
@@ -323,7 +353,6 @@ export default class MainGame extends Phaser.Scene {
         bullet.destroy();
 
         if (enemy.health <= 0) {
-            // RESTORED: Particle explosion effect
             const particles = this.add.particles(enemy.x, enemy.y, 'explosion_part', {
                 speed: { min: 100, max: 300 },
                 lifespan: 500,
@@ -351,37 +380,128 @@ export default class MainGame extends Phaser.Scene {
     }
 
     update(time, delta) {
-        if (!this.player || !this.player.sprite || !this.player.sprite.active) return;
+        if (this.player) this.player.update(time, delta, this.input.activePointer);
+        if (this.sarge) this.sarge.update(time, delta, this.enemies);
 
-        const pointer = this.input.activePointer;
-        this.player.update(time, delta, pointer);
-        this.sarge.update(time, delta, this.enemies);
-
-        // Hiding Mechanic (Foreground Bushes)
-        if (this.bushesLayer) {
-            const isHidden = this.bushesLayer.getTileAtWorldXY(this.player.sprite.x, this.player.sprite.y);
-            this.player.visual.container.setAlpha(isHidden ? 0.5 : 1.0);
-        }
-
+        // Update all enemies
         this.enemies.getChildren().forEach(enemy => {
-            if (enemy && enemy.active && enemy.body) {
-                enemy.visual.container.setPosition(enemy.x, enemy.y + 10);
-                enemy.visual.update(time, delta, enemy.body.velocity.x, false, enemy.weaponKey);
+            if (!enemy.active) return;
+            
+            // 1. Visual Sync
+            enemy.visual.container.setPosition(enemy.x, enemy.y + 10);
+            enemy.visual.update(time, delta, enemy.body.velocity.x, false, enemy.weaponKey);
+            enemy.visual.aimAt(this.player.sprite.x, this.player.sprite.y);
 
-                const dist = Phaser.Math.Distance.Between(enemy.x, enemy.y, this.player.sprite.x, this.player.sprite.y);
-                if (dist < enemy.weaponStats.range) {
-                    enemy.visual.aimAt(this.player.sprite.x, this.player.sprite.y);
-                    if (time > enemy.lastFired + (enemy.weaponStats.fireRate * 2.5)) {
-                        enemy.lastFired = time;
-                        this.fireEnemyWeapon(enemy, enemy.weaponStats);
-                    }
+            // 2. Combat
+            if (time > enemy.lastFired) {
+                this.fireEnemyWeapon(enemy, enemy.weaponStats);
+                enemy.lastFired = time + enemy.weaponStats.fireRate;
+            }
+
+            // 3. Smart Movement AI (Mini Militia Style)
+            const distToPlayer = Phaser.Math.Distance.Between(enemy.x, enemy.y, this.player.sprite.x, this.player.sprite.y);
+            const isBlockedSide = enemy.body.blocked.left || enemy.body.blocked.right;
+            const isBlockedUp = enemy.body.blocked.up;
+            const isBelowPlayer = enemy.y > this.player.sprite.y + 100;
+
+            // Stuck & Progress Detection
+            const distMoved = Phaser.Math.Distance.Between(enemy.x, enemy.y, enemy.lastX, enemy.lastY);
+            if (distMoved < 1.5 && !enemy.isEvading) enemy.stuckTime += delta;
+            else enemy.stuckTime = 0;
+            enemy.lastX = enemy.x; enemy.lastY = enemy.y;
+
+            // Progress Monitor (Reroute if no progress in 2s)
+            if (time > enemy.lastProgressCheck + 2000) {
+                if (distToPlayer > enemy.lastDistToPlayer - 10 && distToPlayer > 300) {
+                    enemy.searchDirection = Math.random() > 0.5 ? 1 : -1; // Force a re-route
+                    enemy.stuckTime = 1100; // Trigger an evade to break loop
                 }
-                enemy.setVelocityX(this.player.sprite.x < enemy.x ? -100 : 100);
+                enemy.lastDistToPlayer = distToPlayer;
+                enemy.lastProgressCheck = time;
+            }
+
+            // Trigger Panic Evade
+            if (enemy.stuckTime > 1000) {
+                enemy.isEvading = true;
+                enemy.evadeTimer = time + 800; 
+                enemy.evadeDir = Math.random() > 0.5 ? 1 : -1;
+                enemy.stuckTime = 0;
+            }
+            if (enemy.isEvading && time > enemy.evadeTimer) enemy.isEvading = false;
+
+            // Tactical Distance based on Weapon
+            let idealDist = 300; 
+            if (enemy.weaponKey === 'sniper' || enemy.weaponKey === 'rifle') idealDist = 600;
+            if (enemy.weaponKey === 'shotgun' || enemy.weaponKey === 'smg') idealDist = 100;
+
+            const accel = 600;
+            const isBlockedDown = enemy.body.blocked.down;
+            const isAbovePlayer = enemy.y < this.player.sprite.y - 100;
+            
+            // --- AWARENESS: Wall Scaling Commitment ---
+            if (isBlockedSide && isBelowPlayer && time > enemy.verticalCommitTimer) {
+                enemy.verticalCommitTimer = time + 1200;
+            }
+
+            // --- MOVEMENT OVERRIDE: PANIC EVADE ---
+            if (enemy.isEvading) {
+                enemy.setAccelerationX(accel * 1.8 * enemy.evadeDir);
+                enemy.setAccelerationY(Math.random() > 0.3 ? -2200 : 0);
+                if (time % 100 < 40) this.enemyJetpackParticles.emitParticleAt(enemy.x, enemy.y + 40);
+            }
+            // --- AWARENESS: Ledge Search (Drop Down) ---
+            else if (isAbovePlayer && isBlockedDown) {
+                if (!enemy.ledgeSearchDirection) enemy.ledgeSearchDirection = (enemy.x < this.player.sprite.x) ? 1 : -1;
+                enemy.setAccelerationX(accel * 1.5 * enemy.ledgeSearchDirection);
+            }
+            // --- GAP SEARCH (Up) ---
+            else if (isBelowPlayer && isBlockedUp) {
+                enemy.ledgeSearchDirection = null;
+                if (!enemy.searchDirection) enemy.searchDirection = Math.random() > 0.5 ? 1 : -1;
+                enemy.setAccelerationX(accel * 1.5 * enemy.searchDirection);
+            } 
+            // --- STANDARD FOLLOW ---
+            else {
+                enemy.ledgeSearchDirection = null;
+                enemy.searchDirection = null;
+                if (distToPlayer > idealDist + 50) {
+                    enemy.setAccelerationX(this.player.sprite.x < enemy.x ? -accel : accel);
+                } else if (distToPlayer < idealDist - 50 && enemy.weaponKey !== 'smg') {
+                    enemy.setAccelerationX(this.player.sprite.x < enemy.x ? accel : -accel);
+                } else {
+                    enemy.setAccelerationX(0);
+                }
+            }
+
+            // Vertical Logic (Smart Jetpack)
+            if (!enemy.isEvading) {
+                let thrustPower = 0;
+                // Priority 1: Wall Climb Commitment
+                if (time < enemy.verticalCommitTimer && !isBlockedUp) {
+                    thrustPower = 2000;
+                }
+                // Priority 2: Standard Chasing
+                else if (enemy.y > this.player.sprite.y + 50 && !isBlockedUp) {
+                    const distY = Math.abs(enemy.y - this.player.sprite.y);
+                    thrustPower = Math.min(2200, 1000 + distY * 5);
+                }
+                // Priority 3: Obstacle Hop
+                else if (isBlockedSide && (isBlockedDown || isBelowPlayer)) {
+                    thrustPower = 1800;
+                }
+
+                if (thrustPower > 0) {
+                    enemy.setAccelerationY(-thrustPower);
+                    if (time % 150 < 30) this.enemyJetpackParticles.emitParticleAt(enemy.x, enemy.y + 40);
+                } else {
+                    enemy.setAccelerationY(0);
+                }
             }
         });
 
         // REFINED: Camera smoothing and mouse peeking
         const cam = this.cameras.main;
+        const pointer = this.input.activePointer;
         const targetX = this.player.sprite.x + (pointer.x - cam.width / 2) * 0.4;
         const targetY = this.player.sprite.y + (pointer.y - cam.height / 2) * 0.4;
 

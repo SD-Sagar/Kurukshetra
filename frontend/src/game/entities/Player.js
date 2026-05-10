@@ -62,6 +62,19 @@ export default class Player {
         this.scene.input.on('pointerup', () => {
             this.isShooting = false;
         });
+
+        // 3. Jetpack Particles
+        this.jetpackParticles = this.scene.add.particles(0, 0, 'bullet_player', {
+            speed: { min: 50, max: 150 },
+            angle: { min: 80, max: 100 },
+            scale: { start: 1.5, end: 0 },
+            lifespan: 400,
+            gravityY: 400,
+            frequency: -1, // Manually controlled
+            tint: 0xffaa44,
+            blendMode: 'ADD'
+        });
+        this.jetpackParticles.setDepth(5);
     }
 
     update(time, delta, pointer) {
@@ -87,36 +100,44 @@ export default class Player {
     }
 
     handleMovement(delta) {
-        const moveSpeed = 300; 
+        const accel = 1000; 
+        const drag = 600;
+        const maxSpeed = 500;
 
-        // Horizontal Movement
+        this.sprite.body.setMaxVelocity(maxSpeed, 1000);
+        this.sprite.body.setDragX(drag);
+
+        // Horizontal Movement (Acceleration-based for "Drift" feel)
         if (this.keys.left.isDown) {
-            this.sprite.setVelocityX(-moveSpeed);
+            this.sprite.setAccelerationX(-accel);
         } else if (this.keys.right.isDown) {
-            this.sprite.setVelocityX(moveSpeed);
+            this.sprite.setAccelerationX(accel);
         } else {
-            this.sprite.setVelocityX(0);
+            this.sprite.setAccelerationX(0);
         }
 
-        // Jetpack / Jump (15-second duration)
-        if (this.keys.space.isDown || this.keys.up.isDown) {
-            if (this.fuel > 0) {
-                this.sprite.setAccelerationY(-2000);
-                this.fuel = Math.max(0, this.fuel - (delta * 0.0066));
-            } else {
-                this.sprite.setAccelerationY(0);
+        // Jetpack / Jump (Mini Militia Style)
+        const isJumping = this.keys.space.isDown || this.keys.up.isDown;
+        
+        if (isJumping && this.fuel > 0) {
+            // Ignition Shake (only when starting)
+            if (this.sprite.body.acceleration.y === 0) {
+                this.scene.cameras.main.shake(100, 0.002);
             }
+
+            this.sprite.setAccelerationY(-2000);
+            this.fuel = Math.max(0, this.fuel - (delta * 0.0066));
+            
+            // Particles
+            this.jetpackParticles.emitParticleAt(this.sprite.x, this.sprite.y + 40);
         } else {
             this.sprite.setAccelerationY(0);
-            // Recharge fuel
-            // We check both 'touching' (objects) and 'blocked' (tiles/world bounds)
-            const isOnGround = this.sprite.body.touching.down || this.sprite.body.blocked.down;
             
+            // Recharge fuel
+            const isOnGround = this.sprite.body.touching.down || this.sprite.body.blocked.down;
             if (isOnGround) {
-                // Rapid recharge on ground (Full in ~5 seconds)
                 this.fuel = Math.min(this.maxFuel, this.fuel + (delta * 0.02));
             } else {
-                // Slow "air-drip" recharge while falling (Full in ~50 seconds)
                 this.fuel = Math.min(this.maxFuel, this.fuel + (delta * 0.002));
             }
         }

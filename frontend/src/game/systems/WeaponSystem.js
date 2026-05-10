@@ -21,7 +21,10 @@ export default class WeaponSystem {
             sniper: { name: 'Sniper', damage: 85, range: 16000, muzzleSpeed: 2500, fireRate: 1500, magSize: 5, reloadTime: 3500, isTracer: true, color: 0xff00ff, key: 'sniper' },
             shotgun: { name: 'Shotgun', damage: 10, range: 800, muzzleSpeed: 900, fireRate: 800, magSize: 6, reloadTime: 2500, pellets: 8, fanAngle: 30, spread: 0.3, color: 0xffff00, key: 'shotgun' },
             launcher: { name: 'Launcher', damage: 100, range: 16000, muzzleSpeed: 600, fireRate: 2000, magSize: 3, reloadTime: 3000, isRocket: true, color: 0xff4500, key: 'launcher' },
-            sarge_smg: { name: 'Sarge SMG', damage: 15, range: 6000, muzzleSpeed: 1200, fireRate: 120, magSize: 50, reloadTime: 2000, spread: 0.05, color: 0xffd700, key: 'sarge_smg' }
+            sarge_smg: { name: 'Sarge SMG', damage: 15, range: 6000, muzzleSpeed: 1200, fireRate: 120, magSize: 50, reloadTime: 2000, spread: 0.05, color: 0xffd700, key: 'sarge_smg' },
+            dagger: { name: 'Dagger', damage: 35, range: 70, muzzleSpeed: 0, fireRate: 400, magSize: 999, reloadTime: 0, isMelee: true, color: 0xcccccc, key: 'dagger' },
+            machinegun: { name: 'Machine Gun', damage: 20, range: 8000, muzzleSpeed: 1300, fireRate: 80, magSize: 100, reloadTime: 4000, spread: 0.12, color: 0x00ff88, key: 'machinegun' },
+            tacticalshotgun: { name: 'Tactical Shotgun', damage: 8, range: 1000, muzzleSpeed: 1000, fireRate: 400, magSize: 10, reloadTime: 2500, pellets: 6, fanAngle: 25, spread: 0.2, color: 0xff8800, key: 'tacticalshotgun' }
         };
 
         this.inventory = [null, null]; 
@@ -55,6 +58,13 @@ export default class WeaponSystem {
         const now = this.scene.time.now;
         if (now < this.lastFired + wp.fireRate) return;
 
+        // Melee logic bypasses ammo
+        if (wp.isMelee) {
+            this.lastFired = now;
+            this.performMelee(targetX, targetY, wp);
+            return;
+        }
+
         if (this.ammo[this.currentSlot].loaded <= 0) {
             this.reload();
             return;
@@ -67,7 +77,8 @@ export default class WeaponSystem {
         const startY = this.owner.y;
         const baseAngle = Phaser.Math.Angle.Between(startX, startY, targetX, targetY);
 
-        if (this.inventory[this.currentSlot] === 'shotgun') {
+        const currentWpKey = this.inventory[this.currentSlot];
+        if (currentWpKey && currentWpKey.includes('shotgun')) {
             // FIXED GEOMETRIC FAN (30 degrees)
             const spreadRad = Phaser.Math.DegToRad(wp.fanAngle);
             const step = spreadRad / (wp.pellets - 1);
@@ -88,6 +99,32 @@ export default class WeaponSystem {
             this.spawnBullet(tx, ty, wp);
         } else {
             this.spawnBullet(targetX, targetY, wp);
+        }
+    }
+
+    performMelee(targetX, targetY, wp) {
+        if (this.visual && this.visual.playMeleeAnimation) {
+            this.visual.playMeleeAnimation();
+        }
+
+        // Damage check
+        const startX = this.owner.x;
+        const startY = this.owner.y;
+        const angle = Phaser.Math.Angle.Between(startX, startY, targetX, targetY);
+
+        if (this.scene.enemies) {
+            this.scene.enemies.getChildren().forEach(enemy => {
+                if (!enemy.active) return;
+                const dist = Phaser.Math.Distance.Between(startX, startY, enemy.x, enemy.y);
+                if (dist < wp.range) {
+                    // Check if enemy is roughly in front of us (90 degree arc)
+                    const angleToEnemy = Phaser.Math.Angle.Between(startX, startY, enemy.x, enemy.y);
+                    const diff = Math.abs(Phaser.Math.Angle.Wrap(angle - angleToEnemy));
+                    if (diff < Math.PI / 3) {
+                        this.scene.bulletHitEnemy({ active: true, damage: wp.damage, destroy: () => {} }, enemy);
+                    }
+                }
+            });
         }
     }
 
@@ -173,10 +210,21 @@ export default class WeaponSystem {
             bullet.setTint(weapon.projectileColor || weapon.color);
 
             const angle = Phaser.Math.Angle.Between(this.owner.x, this.owner.y, targetX, targetY);
+            
+            // USE NEW BULLET PNG FOR SPECIFIC GUNS
+            const useBulletPng = ['pistol', 'rifle', 'smg', 'machinegun', 'sarge_smg'].includes(weapon.key);
+            if (useBulletPng) {
+                bullet.setTexture('bullet');
+                bullet.setRotation(angle + Math.PI); // Faces Left in PNG, so add 180 deg
+                bullet.setDisplaySize(20, 10);
+            } else {
+                bullet.setRotation(angle);
+            }
+
             if (weapon.isRocket) {
                 bullet.setRotation(angle);
                 bullet.setTexture('rocket');
-                bullet.setDisplaySize(30, 15);
+                bullet.setDisplaySize(45, 22); // LARGER ROCKET
                 bullet.setTint(0xffffff); // Clear tint for sprite
                 
                 // Rocket collision logic override
@@ -254,7 +302,7 @@ export default class WeaponSystem {
         if (grenade) {
             grenade.setTexture('grenade');
             grenade.setActive(true).setVisible(true).setTint(0xffffff); // Clear tint
-            grenade.setDisplaySize(16, 16);
+            grenade.setDisplaySize(24, 24); // LARGER GRENADE
             grenade.setPosition(spawnX, spawnY);
 
             if (grenade.body) {
