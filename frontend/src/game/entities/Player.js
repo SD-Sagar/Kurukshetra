@@ -167,6 +167,18 @@ export default class Player {
         });
 
         if (nearest) {
+            // Trigger Respawn Timer if it was a permanent map item
+            if (nearest.isPermanent) {
+                this.scene.handleLootPickup(nearest.pointIndex);
+            }
+
+            // GRENADE PICKUP
+            if (nearest.weaponKey === 'grenade') {
+                this.weapons.grenades += 3;
+                nearest.destroy();
+                return;
+            }
+
             // 1. Check if we already have this weapon in ANY slot
             const duplicateSlot = this.weapons.inventory.indexOf(nearest.weaponKey);
 
@@ -181,8 +193,8 @@ export default class Player {
             const currentKey = this.weapons.inventory[this.weapons.currentSlot];
             if (currentKey) {
                 const dropped = this.weapons.dropCurrentWeapon();
-                // Toss the weapon slightly so it doesn't clip
-                this.scene.spawnWeaponPickup(this.sprite.x, this.sprite.y - 20, dropped.key, dropped.ammo);
+                // Toss the weapon slightly so it doesn't clip (Dropped weapons are temporary)
+                this.scene.spawnWeaponPickup(this.sprite.x, this.sprite.y - 20, dropped.key, dropped.ammo, false);
             }
 
             this.weapons.addWeapon(nearest.weaponKey, nearest.ammo);
@@ -203,8 +215,14 @@ export default class Player {
     }
 
     takeDamage(amount) {
+        if (this.isRespawning) return;
         this.health = Math.max(0, this.health - amount);
         this.lastDamageTime = this.scene.time.now;
+
+        if (this.health <= 0) {
+            this.sprite.setActive(false).setVisible(false);
+            this.scene.onPlayerDeath();
+        }
     }
 
     syncUI() {

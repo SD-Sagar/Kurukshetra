@@ -81,33 +81,38 @@ export default class MainGame extends Phaser.Scene {
 
         // Spawn Entities from Object Layer
         const spawnLayer = map.getObjectLayer('Spawns_And_Pickups');
-        let playerSpawn = { x: this.worldWidth / 2, y: this.worldHeight - 300 };
+        this.playerSpawns = [];
         let sargeSpawn = { x: this.worldWidth / 2 - 150, y: this.worldHeight - 300 };
 
+        // 1. First Pass: Find Essential Spawn Points
+        this.lootPoints = [];
         if (spawnLayer) {
-            // First pass: Find player and sarge spawns
             spawnLayer.objects.forEach(obj => {
                 if (obj.name === 'player_spawn') {
-                    playerSpawn = { x: obj.x, y: obj.y };
+                    this.playerSpawns.push({ x: obj.x, y: obj.y });
                 } else if (obj.name === 'sarge_spawn') {
                     sargeSpawn = { x: obj.x, y: obj.y };
                 }
             });
         }
 
-        // Initialize characters before spawning enemies/loot
-        this.player = new Player(this, playerSpawn.x, playerSpawn.y);
+        // Default spawn if none found
+        if (this.playerSpawns.length === 0) this.playerSpawns.push({ x: this.worldWidth / 2, y: this.worldHeight - 300 });
+        const initialSpawn = this.playerSpawns[0];
+
+        // 2. Initialize Hero Characters
+        this.player = new Player(this, initialSpawn.x, initialSpawn.y);
         this.sarge = new SargeAI(this, sargeSpawn.x, sargeSpawn.y, this.player, this.pathfinder);
 
+        // 3. Second Pass: Spawn Enemies and Loot (Now safe to access this.player)
         if (spawnLayer) {
-            // Second pass: Spawn enemies and loot
             spawnLayer.objects.forEach(obj => {
                 if (obj.name === 'enemy_spawn') {
                     this.spawnEnemyAt(obj.x, obj.y);
                 } else if (obj.name === 'loot_drop') {
-                    const keys = ['pistol', 'smg', 'rifle', 'shotgun', 'sniper', 'launcher', 'machinegun', 'tacticalshotgun'];
-                    const key = keys[Phaser.Math.Between(0, keys.length - 1)];
-                    this.spawnWeaponPickup(obj.x, obj.y, key);
+                    const point = { x: obj.x, y: obj.y, active: false, index: this.lootPoints.length };
+                    this.lootPoints.push(point);
+                    this.spawnNewLootAtPoint(point);
                 }
             });
         }
@@ -162,9 +167,98 @@ export default class MainGame extends Phaser.Scene {
         });
 
         this.input.keyboard.on('keydown-Z', () => this.toggleZoom());
+        this.input.keyboard.on('keydown-ESC', () => this.togglePause());
 
         // Enemy Spawner
         this.time.addEvent({ delay: 3000, callback: this.spawnEnemy, callbackScope: this, loop: true });
+    }
+
+    togglePause() {
+        if (this.isPaused) {
+            this.resumeGame();
+        } else {
+            this.pauseGame();
+        }
+    }
+
+    pauseGame() {
+        this.isPaused = true;
+        this.physics.pause();
+        this.scene.pause();
+        this.showPauseMenu();
+    }
+
+    resumeGame() {
+        this.isPaused = false;
+        this.physics.resume();
+        this.scene.resume();
+        this.hidePauseMenu();
+    }
+
+    showPauseMenu() {
+        let menu = document.getElementById('pause-menu');
+        if (!menu) {
+            menu = document.createElement('div');
+            menu.id = 'pause-menu';
+            menu.style.cssText = `
+                position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+                background: rgba(0,0,0,0.8); display: flex; flex-direction: column;
+                justify-content: center; align-items: center; z-index: 9999;
+                font-family: 'Orbitron', sans-serif; color: white;
+            `;
+            menu.innerHTML = `
+                <h1 style="font-size: 3rem; margin-bottom: 2rem; color: #44aaff; text-shadow: 0 0 20px #44aaff;">PAUSED</h1>
+                <button id="resume-btn" style="padding: 1rem 3rem; margin: 0.5rem; background: #222; border: 2px solid #44aaff; color: white; cursor: pointer; font-size: 1.2rem; width: 250px;">RESUME</button>
+                <button id="menu-btn" style="padding: 1rem 3rem; margin: 0.5rem; background: #222; border: 2px solid #44aaff; color: white; cursor: pointer; font-size: 1.2rem; width: 250px;">EXIT TO MENU</button>
+                <button id="exit-btn" style="padding: 1rem 3rem; margin: 0.5rem; background: #222; border: 2px solid #44aaff; color: white; cursor: pointer; font-size: 1.2rem; width: 250px;">QUIT GAME</button>
+            `;
+            document.body.appendChild(menu);
+
+            document.getElementById('resume-btn').onclick = () => this.resumeGame();
+            document.getElementById('menu-btn').onclick = () => {
+                this.hidePauseMenu();
+                this.scene.start('MainMenu');
+            };
+            document.getElementById('exit-btn').onclick = () => {
+                this.hidePauseMenu();
+                window.location.href = '/login';
+            };
+        }
+        menu.style.display = 'flex';
+    }
+
+    hidePauseMenu() {
+        const menu = document.getElementById('pause-menu');
+        if (menu) menu.style.display = 'none';
+    }
+
+    onPlayerDeath() {
+        if (this.player.isRespawning) return;
+        this.player.isRespawning = true;
+        
+        // Visual death effect (fade out)
+        this.cameras.main.fadeOut(500, 0, 0, 0);
+
+        this.time.delayedCall(2000, () => {
+            // Random Respawn
+            const spawn = this.playerSpawns[Phaser.Math.Between(0, this.playerSpawns.length - 1)];
+            this.player.sprite.setPosition(spawn.x, spawn.y);
+            this.player.health = 100;
+            this.player.fuel = 100;
+            this.player.isRespawning = false;
+            this.player.sprite.setActive(true);
+
+            // Reset Loadout on Respawn
+            this.player.weapons.resetInventory();
+            this.player.weapons.addWeapon('pistol');
+            this.player.weapons.addWeapon('dagger');
+
+            // Teleport Sarge
+            this.sarge.sprite.setPosition(spawn.x - 50, spawn.y);
+            this.sarge.say("This is not the way recruit", 4000);
+
+            this.cameras.main.fadeIn(500, 0, 0, 0);
+        });
     }
 
     updateBaseZoom() {
@@ -194,18 +288,52 @@ export default class MainGame extends Phaser.Scene {
         this.applyCurrentZoom(false);
     }
 
-    spawnWeaponPickup(x, y, weaponKey, ammo = null) {
+    spawnNewLootAtPoint(point) {
+        const keys = ['pistol', 'smg', 'rifle', 'shotgun', 'sniper', 'launcher', 'machinegun', 'tacticalshotgun', 'grenade'];
+        const key = keys[Phaser.Math.Between(0, keys.length - 1)];
+        this.spawnWeaponPickup(point.x, point.y, key, null, true, point.index);
+        point.active = true;
+    }
+
+    spawnWeaponPickup(x, y, weaponKey, ammo = null, isPermanent = false, pointIndex = -1) {
         if (!this.player || !this.player.weapons) return;
-        const wpData = this.player.weapons.weaponData[weaponKey];
+        
         const pickup = this.weaponPickups.create(x, y, weaponKey);
-        pickup.setTint(0xffffff); // Clear tint
-        pickup.setDisplaySize(60, 30); // Slightly larger for visibility
+        pickup.setTint(0xffffff); 
         pickup.weaponKey = weaponKey;
-        pickup.ammo = ammo || { loaded: wpData.magSize, reserve: wpData.magSize * 2 };
+        pickup.isPermanent = isPermanent;
+        pickup.pointIndex = pointIndex;
+
+        if (weaponKey === 'grenade') {
+            pickup.setDisplaySize(33, 33); // Match grenade belt size
+            pickup.ammo = { count: 3 };
+        } else {
+            const wpData = this.player.weapons.weaponData[weaponKey];
+            pickup.setDisplaySize(60, 30);
+            pickup.ammo = ammo || { loaded: wpData.magSize, reserve: wpData.magSize * 2 };
+        }
+
         pickup.body.setSize(40, 20).setBounce(0.5).setDrag(100);
-        pickup.body.setVelocity(Phaser.Math.Between(-100, 100), -200);
-        this.time.delayedCall(10000, () => { if (pickup.active) pickup.destroy(); });
+        
+        if (!isPermanent) {
+            pickup.body.setVelocity(Phaser.Math.Between(-100, 100), -200);
+            this.time.delayedCall(10000, () => { if (pickup.active) pickup.destroy(); });
+        } else {
+            pickup.body.setImmovable(true);
+            pickup.body.setAllowGravity(false);
+        }
         return pickup;
+    }
+
+    handleLootPickup(pointIndex) {
+        if (pointIndex === -1) return;
+        const point = this.lootPoints[pointIndex];
+        point.active = false;
+        
+        // 15 Second Respawn Timer
+        this.time.delayedCall(15000, () => {
+            this.spawnNewLootAtPoint(point);
+        });
     }
 
     spawnEnemy() {

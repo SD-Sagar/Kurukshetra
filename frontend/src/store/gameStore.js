@@ -8,6 +8,7 @@ export const useGameStore = create((set) => ({
     isMobile: false,
     userToken: null,
     userProfile: null,
+    isGuest: false,
     grenades: 3,
     
     // Flow State
@@ -24,6 +25,6 @@ export const useGameStore = create((set) => ({
     setIsNewGame: (val) => set({ isNewGame: val }),
     setSelectedWeapons: (weapons) => set({ selectedWeapons: weapons }),
     
-    login: (token, profile) => set({ userToken: token, userProfile: profile }),
-    logout: () => set({ userToken: null, userProfile: null }),
+    login: (token, profile) => set({ userToken: token, userProfile: profile, isGuest: !token }),
+    logout: () => set({ userToken: null, userProfile: null, isGuest: false }),
 }));
