@@ -49,22 +49,21 @@ export default class Preloader extends Phaser.Scene {
         this.load.image('player_leg_bend', 'assets/characters/player/legs/legBend-male.png');
 
         // Character Assets - Sarge
-        this.load.image('sarge_head', 'assets/characters/sarge/head/head.png');
-        this.load.image('sarge_head_focus', 'assets/characters/sarge/head/headFocus.png');
-        this.load.image('sarge_head_shock', 'assets/characters/sarge/head/headShock.png');
-        this.load.image('sarge_torso', 'assets/characters/sarge/torso/body.png');
-        this.load.image('sarge_arm', 'assets/characters/sarge/arms/arm.png');
-        this.load.image('sarge_hand', 'assets/characters/sarge/arms/hand.png');
-        this.load.image('sarge_leg', 'assets/characters/sarge/legs/leg.png');
-        this.load.image('sarge_leg_bend', 'assets/characters/sarge/legs/legBend.png');
+        // Character Assets - Sarge
+        this.load.image('head-sarge', 'assets/characters/sarge/head/head.png');
+        this.load.image('headFocus-sarge', 'assets/characters/sarge/head/headFocus.png');
+        this.load.image('headShock-sarge', 'assets/characters/sarge/head/headShock.png');
+        this.load.image('body-sarge', 'assets/characters/sarge/torso/body.png');
+        this.load.image('arm-sarge', 'assets/characters/sarge/arms/arm.png');
+        this.load.image('leg-sarge', 'assets/characters/sarge/legs/leg.png');
+        this.load.image('legBend-sarge', 'assets/characters/sarge/legs/legBend.png');
 
         // Character Assets - Enemies
-        this.load.image('enemy_head', 'assets/characters/Enimies/head/head.png');
-        this.load.image('enemy_torso', 'assets/characters/Enimies/torso/body.png');
-        this.load.image('enemy_arm', 'assets/characters/Enimies/arms/arm.png');
-        this.load.image('enemy_hand', 'assets/characters/Enimies/arms/hand.png');
-        this.load.image('enemy_leg', 'assets/characters/Enimies/legs/leg.png');
-        this.load.image('enemy_leg_bend', 'assets/characters/Enimies/legs/legBend.png');
+        this.load.image('head-enemy', 'assets/characters/Enimies/head/head.png');
+        this.load.image('body-enemy', 'assets/characters/Enimies/torso/body.png');
+        this.load.image('arm-enemy', 'assets/characters/Enimies/arms/arm.png');
+        this.load.image('leg-enemy', 'assets/characters/Enimies/legs/leg.png');
+        this.load.image('legBend-enemy', 'assets/characters/Enimies/legs/legBend.png');
 
         // Weapon Sprites
         this.load.image('pistol', 'assets/weapons/pistol.png');
@@ -85,6 +84,37 @@ export default class Preloader extends Phaser.Scene {
         this.load.tilemapTiledJSON('map', 'assets/maps/map.json');
         this.load.image('tileset_background', 'assets/maps/background.png');
         this.load.image('tileset_70', 'assets/maps/tileset_70.png');
+
+        // --- NEW CUSTOMIZATION ASSETS ---
+        
+        // HEADS (Normal, Shock, Focus)
+        const heads = ['Commando', 'Indiancaptain', 'Indiancommando', 'Indiancommando2', 'Ops', 'Soldire', 'Spetnaz', 'Spetnaz2', 'Terrorist'];
+        heads.forEach(h => {
+            this.load.image(`head-${h}`, `assets/characters/player/head/head-${h}.png`);
+            this.load.image(`headFocus-${h}`, `assets/characters/player/head/headFocus-${h}.png`);
+            // Note: headShock-Indiancapain.png has a typo in filename (capain), handling it:
+            const shockFile = h === 'Indiancaptain' ? 'Indiancapain' : h;
+            this.load.image(`headShock-${h}`, `assets/characters/player/head/headShock-${shockFile}.png`);
+        });
+
+        // TORSOS
+        const torsos = ['Commando', 'Indiancommando', 'Indiancommando2', 'Ops', 'Soldire', 'Spetnaz2', 'Terrorist'];
+        torsos.forEach(t => {
+            this.load.image(`body-${t}`, `assets/characters/player/torso/body-${t}.png`);
+        });
+
+        // ARMS
+        const arms = ['commando', 'navy', 'soldire', 'spetnaz'];
+        arms.forEach(a => {
+            this.load.image(`arm-${a}`, `assets/characters/player/arms/arm-${a}.png`);
+        });
+
+        // LEGS (Normal, Bend)
+        const legs = ['Commando', 'Indiancommando', 'Ops', 'Soldire', 'Spetnaz', 'Spetnaz2', 'Terrorist'];
+        legs.forEach(l => {
+            this.load.image(`leg-${l}`, `assets/characters/player/legs/leg-${l}.png`);
+            this.load.image(`legBend-${l}`, `assets/characters/player/legs/legBend-${l}.png`);
+        });
 
         this.load.on('loaderror', (fileObj) => {
             console.error(`Failed to load asset: ${fileObj.key} from ${fileObj.url}`);

@@ -6,10 +6,16 @@ export const useGameStore = create((set) => ({
     ammo: { loaded: 0, reserve: 0 },
     zoomLevel: 1,
     isMobile: false,
-    userToken: null,
-    userProfile: null,
     isGuest: false,
     grenades: 3,
+    
+    // Character Customization
+    appearance: {
+        head: 'male',
+        torso: 'male',
+        legs: 'male',
+        arms: 'male'
+    },
     
     // Flow State
     isNewGame: false,
@@ -24,6 +30,7 @@ export const useGameStore = create((set) => ({
     
     setIsNewGame: (val) => set({ isNewGame: val }),
     setSelectedWeapons: (weapons) => set({ selectedWeapons: weapons }),
+    setAppearance: (parts) => set((state) => ({ appearance: { ...state.appearance, ...parts } })),
     
     login: (token, profile) => set({ userToken: token, userProfile: profile, isGuest: !token }),
     logout: () => set({ userToken: null, userProfile: null, isGuest: false }),

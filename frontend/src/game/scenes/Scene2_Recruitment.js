@@ -34,7 +34,7 @@ export default class Scene2_Recruitment extends Phaser.Scene {
         this.player = new CharacterAssembler(this, { type: 'player' });
         this.player.container.setPosition(width / 2 + 100, height - 110);
         this.player.container.setAngle(-90); // Lying on floor
-        this.player.head.setTexture('player_head_shock');
+        this.player.setExpression('shock');
 
         // Dialogue System (Pinned to Sarge)
         this.bubble = this.add.graphics();
@@ -72,7 +72,7 @@ export default class Scene2_Recruitment extends Phaser.Scene {
             },
             onComplete: () => {
                 this.sarge.update(0, 16, 0); 
-                this.sarge.head.setTexture('sarge_head_focus');
+                this.sarge.setExpression('focus');
                 this.time.delayedCall(800, () => {
                     this.showDialogue(`Wake up, ${this.username}. The world is burning... and you're the only pilot left standing.`, () => {
                         this.time.delayedCall(4000, this.offerHand, [], this);
@@ -132,7 +132,7 @@ export default class Scene2_Recruitment extends Phaser.Scene {
             duration: 800,
             ease: 'Back.easeOut',
             onComplete: () => {
-                this.player.head.setTexture('player_head'); // Back to normal
+                this.player.setExpression('normal'); // Back to normal
                 this.time.delayedCall(1000, this.finishScene, [], this);
             }
         });

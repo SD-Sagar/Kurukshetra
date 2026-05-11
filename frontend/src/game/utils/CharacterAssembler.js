@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { useGameStore } from '../../store/gameStore';
 
 export default class CharacterAssembler {
     constructor(scene, config) {
@@ -12,16 +13,25 @@ export default class CharacterAssembler {
 
         const prefix = this.type === 'player' ? 'player' : (this.type === 'sarge' ? 'sarge' : 'enemy');
 
-        this.legBack = this.scene.add.sprite(-8, 20, `${prefix}_leg`);
-        this.legFront = this.scene.add.sprite(8, 20, `${prefix}_leg`);
-        this.torso = this.scene.add.sprite(0, 0, `${prefix}_torso`);
-        this.armBack = this.scene.add.sprite(-15, -5, `${prefix}_arm`);
-        this.armFront = this.scene.add.sprite(15, -5, `${prefix}_arm`);
+        // Dynamic Appearance Mapping
+        const store = useGameStore.getState();
+        const app = this.type === 'player' ? store.appearance : {
+            head: prefix, torso: prefix, arms: prefix, legs: prefix
+        };
+
+        this.legBack = this.scene.add.sprite(-8, 28, `leg-${app.legs}`);
+        this.legFront = this.scene.add.sprite(8, 28, `leg-${app.legs}`);
+        this.legBack.setScale(1.2);
+        this.legFront.setScale(1.2);
+
+        this.torso = this.scene.add.sprite(0, 0, `body-${app.torso}`);
+        this.armBack = this.scene.add.sprite(-7, -2, `arm-${app.arms}`);
+        this.armFront = this.scene.add.sprite(-23, -2, `arm-${app.arms}`);
 
         this.weapon = this.scene.add.sprite(0, 0, 'pistol');
-        this.weapon.setOrigin(0.85, 0.5); // Grip by the Handle (Right side of PNG)
+        this.weapon.setOrigin(0.85, 0.5); 
         this.weapon.setVisible(false);
-        this.head = this.scene.add.sprite(0, -35, `${prefix}_head`);
+        this.head = this.scene.add.sprite(0, -10, `head-${app.head}`);
 
         // Grenade Belt (Visual Only)
         this.grenadeBelt = this.scene.add.sprite(0, 15, 'grenade');
@@ -54,8 +64,25 @@ export default class CharacterAssembler {
         this.container.add(this.slashGraphics);
     }
 
+    setExpression(type) {
+        const app = this.type === 'player' ? useGameStore.getState().appearance : { head: this.type === 'sarge' ? 'sarge' : 'enemy' };
+        
+        if (type === 'shock') {
+            this.head.setTexture(`headShock-${app.head}`);
+        } else if (type === 'focus') {
+            this.head.setTexture(`headFocus-${app.head}`);
+        } else {
+            this.head.setTexture(`head-${app.head}`);
+        }
+    }
+
     update(time, delta, velocityX, isCrouching = false, weaponColor = null, grenades = 0) {
-        const prefix = this.type === 'player' ? 'player' : (this.type === 'sarge' ? 'sarge' : 'enemy');
+        const store = useGameStore.getState();
+        const app = this.type === 'player' ? store.appearance : {
+            head: this.type === 'sarge' ? 'sarge' : 'enemy',
+            legs: this.type === 'sarge' ? 'sarge' : 'enemy'
+        };
+        
         this.currentWeaponColor = weaponColor;
         
         // Hide belt if no grenades left (Player Only)
@@ -73,18 +100,20 @@ export default class CharacterAssembler {
         }
 
         if (isCrouching) {
-            this.legFront.setTexture(`${prefix}_leg_bend`);
-            this.legBack.setTexture(`${prefix}_leg_bend`);
+            this.legFront.setTexture(`legBend-${app.legs}`);
+            this.legBack.setTexture(`legBend-${app.legs}`);
             this.torso.y = 12;
-            this.head.y = -23;
-            this.armFront.y = 7;
-            this.armBack.y = 7;
-            this.grenadeBelt.y = 27; // Shift down while crouching
+            this.head.y = 3;
+            this.armFront.y = 10;
+            this.armBack.y = 10;
+            this.grenadeBelt.y = 27; 
         } else {
+            this.legFront.setTexture(`leg-${app.legs}`);
+            this.legBack.setTexture(`leg-${app.legs}`);
             this.torso.y = 0;
-            this.head.y = -35;
-            this.armFront.y = -5;
-            this.armBack.y = -5;
+            this.head.y = -10;
+            this.armFront.y = -2;
+            this.armBack.y = -2;
             this.grenadeBelt.y = 15;
 
             if (Math.abs(velocityX) > 10) {
@@ -99,17 +128,17 @@ export default class CharacterAssembler {
                 }
 
                 if (Math.abs(swing) > 12) {
-                    this.legFront.setTexture(`${prefix}_leg_bend`);
-                    this.legBack.setTexture(`${prefix}_leg`);
+                    this.legFront.setTexture(`legBend-${app.legs}`);
+                    this.legBack.setTexture(`leg-${app.legs}`);
                 } else {
-                    this.legFront.setTexture(`${prefix}_leg`);
-                    this.legBack.setTexture(`${prefix}_leg_bend`);
+                    this.legFront.setTexture(`leg-${app.legs}`);
+                    this.legBack.setTexture(`legBend-${app.legs}`);
                 }
             } else {
                 this.legFront.setAngle(0);
                 this.legBack.setAngle(0);
-                this.legFront.setTexture(`${prefix}_leg`);
-                this.legBack.setTexture(`${prefix}_leg`);
+                this.legFront.setTexture(`leg-${app.legs}`);
+                this.legBack.setTexture(`leg-${app.legs}`);
                 if (weaponColor === null) {
                     this.armFront.setAngle(0);
                     this.armBack.setAngle(0);
@@ -240,6 +269,23 @@ export default class CharacterAssembler {
                 this.slashGraphics.alpha = 1;
             }
         });
+    }
+
+    refreshTextures() {
+        const store = useGameStore.getState();
+        const app = this.type === 'player' ? store.appearance : {
+            head: this.type === 'sarge' ? 'sarge' : 'enemy',
+            torso: this.type === 'sarge' ? 'sarge' : 'enemy',
+            arms: this.type === 'sarge' ? 'sarge' : 'enemy',
+            legs: this.type === 'sarge' ? 'sarge' : 'enemy'
+        };
+
+        this.legBack.setTexture(`leg-${app.legs}`);
+        this.legFront.setTexture(`leg-${app.legs}`);
+        this.torso.setTexture(`body-${app.torso}`);
+        this.armBack.setTexture(`arm-${app.arms}`);
+        this.armFront.setTexture(`arm-${app.arms}`);
+        this.head.setTexture(`head-${app.head}`);
     }
 
     destroy() {
