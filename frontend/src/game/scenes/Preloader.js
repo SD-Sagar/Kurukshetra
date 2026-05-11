@@ -38,15 +38,7 @@ export default class Preloader extends Phaser.Scene {
             loadingText.destroy();
         });
 
-        // Character Assets - Player
-        this.load.image('player_head', 'assets/characters/player/head/head-male.png');
-        this.load.image('player_head_focus', 'assets/characters/player/head/headFocus-male.png');
-        this.load.image('player_head_shock', 'assets/characters/player/head/headShock-male.png');
-        this.load.image('player_torso', 'assets/characters/player/torso/body-male.png');
-        this.load.image('player_arm', 'assets/characters/player/arms/arm-male.png');
-        this.load.image('player_hand', 'assets/characters/player/arms/hand-male.png');
-        this.load.image('player_leg', 'assets/characters/player/legs/leg-male.png');
-        this.load.image('player_leg_bend', 'assets/characters/player/legs/legBend-male.png');
+
 
         // Character Assets - Sarge
         // Character Assets - Sarge

@@ -11,10 +11,10 @@ export const useGameStore = create((set) => ({
     
     // Character Customization
     appearance: {
-        head: 'male',
-        torso: 'male',
-        legs: 'male',
-        arms: 'male'
+        head: 'Commando',
+        torso: 'Commando',
+        legs: 'Commando',
+        arms: 'commando'
     },
     
     // Flow State

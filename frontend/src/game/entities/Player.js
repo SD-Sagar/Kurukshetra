@@ -12,7 +12,7 @@ export default class Player {
 
         // 2. Create an invisible Physics Sprite for collision (The Hitbox)
         // We use a separate sprite so the container can flip and animate freely
-        this.sprite = this.scene.physics.add.sprite(x, y, null);
+        this.sprite = this.scene.physics.add.sprite(x, y, 'white_square');
         this.sprite.body.setSize(40, 80);
         this.sprite.setVisible(false); // Invisible hitbox
         this.sprite.setCollideWorldBounds(true);
@@ -23,6 +23,7 @@ export default class Player {
         this.fuel = 100;
         this.maxFuel = 100;
         this.isCrouching = false;
+        this.isRespawning = false;
         this.lastDamageTime = 0;
 
         // Systems
@@ -55,9 +56,11 @@ export default class Player {
             this.switchSlot(nextSlot);
         });
 
-        // Mouse click for shooting
+        // Mouse click for shooting + Force Focus
         this.scene.input.on('pointerdown', (pointer) => {
             if (pointer.leftButtonDown()) this.isShooting = true;
+            // Ensure keyboard is focused
+            if (this.scene.input.keyboard) this.scene.input.keyboard.enabled = true;
         });
         this.scene.input.on('pointerup', () => {
             this.isShooting = false;
@@ -78,7 +81,7 @@ export default class Player {
     }
 
     update(time, delta, pointer) {
-        if (!this.sprite || !this.sprite.active || !this.sprite.body) return;
+        if (!this.sprite || !this.sprite.body || !this.sprite.active || this.isRespawning) return;
 
         // Sync visual with physics body - Locked Standing Offset
         this.visual.container.setPosition(this.sprite.x, this.sprite.y + 10);
@@ -220,6 +223,7 @@ export default class Player {
         this.lastDamageTime = this.scene.time.now;
 
         if (this.health <= 0) {
+            this.visual.explode();
             this.sprite.setActive(false).setVisible(false);
             this.scene.onPlayerDeath();
         }

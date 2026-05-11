@@ -101,7 +101,7 @@ export default class MainGame extends Phaser.Scene {
         const initialSpawn = this.playerSpawns[0];
 
         // 2. Initialize Hero Characters
-        this.player = new Player(this, initialSpawn.x, initialSpawn.y);
+        this.player = new Player(this, initialSpawn.x, initialSpawn.y - 50);
         this.sarge = new SargeAI(this, sargeSpawn.x, sargeSpawn.y, this.player, this.pathfinder);
 
         // 3. Second Pass: Spawn Enemies and Loot (Now safe to access this.player)
@@ -236,10 +236,10 @@ export default class MainGame extends Phaser.Scene {
         if (this.player.isRespawning) return;
         this.player.isRespawning = true;
         
-        // Visual death effect (fade out)
-        this.cameras.main.fadeOut(500, 0, 0, 0);
+        // Visual death effect (briefly see pieces before fade)
+        this.time.delayedCall(1300, () => this.cameras.main.fadeOut(500, 0, 0, 0));
 
-        this.time.delayedCall(2000, () => {
+        this.time.delayedCall(2300, () => {
             // Random Respawn
             const spawn = this.playerSpawns[Phaser.Math.Between(0, this.playerSpawns.length - 1)];
             this.player.sprite.setPosition(spawn.x, spawn.y);
@@ -247,6 +247,9 @@ export default class MainGame extends Phaser.Scene {
             this.player.fuel = 100;
             this.player.isRespawning = false;
             this.player.sprite.setActive(true);
+            this.player.sprite.body.setEnable(true);
+            this.player.sprite.body.reset(spawn.x, spawn.y);
+            this.player.visual.reset();
 
             // Reset Loadout on Respawn
             this.player.weapons.resetInventory();
@@ -500,7 +503,7 @@ export default class MainGame extends Phaser.Scene {
             this.time.delayedCall(500, () => particles.destroy());
 
             if (enemy.weaponKey) this.spawnWeaponPickup(enemy.x, enemy.y, enemy.weaponKey);
-            if (enemy.visual) enemy.visual.destroy();
+            if (enemy.visual) enemy.visual.explode();
             enemy.destroy();
         }
     }

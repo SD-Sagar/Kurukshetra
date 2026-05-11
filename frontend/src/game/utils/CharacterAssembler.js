@@ -19,19 +19,31 @@ export default class CharacterAssembler {
             head: prefix, torso: prefix, arms: prefix, legs: prefix
         };
 
-        this.legBack = this.scene.add.sprite(-8, 28, `leg-${app.legs}`);
-        this.legFront = this.scene.add.sprite(8, 28, `leg-${app.legs}`);
-        this.legBack.setScale(1.2);
-        this.legFront.setScale(1.2);
+        // Configuration based on type
+        const isGoldenRatio = this.type === 'player' || this.type === 'sarge';
+        const headY = isGoldenRatio ? -10 : -35;
+        const armY = isGoldenRatio ? -2 : -5;
+        const armFX = isGoldenRatio ? -23 : 15;
+        const armBX = isGoldenRatio ? 8 : -15;
+        const legY = isGoldenRatio ? 28 : 20;
+        const legScale = isGoldenRatio ? 1.3 : 1.0;
+        const armScale = isGoldenRatio ? 1.2 : 1.0;
+
+        this.legBack = this.scene.add.sprite(-8, legY, `leg-${app.legs}`);
+        this.legFront = this.scene.add.sprite(8, legY, `leg-${app.legs}`);
+        this.legBack.setScale(legScale);
+        this.legFront.setScale(legScale);
 
         this.torso = this.scene.add.sprite(0, 0, `body-${app.torso}`);
-        this.armBack = this.scene.add.sprite(-7, -2, `arm-${app.arms}`);
-        this.armFront = this.scene.add.sprite(-23, -2, `arm-${app.arms}`);
+        this.armBack = this.scene.add.sprite(armBX, armY, `arm-${app.arms}`);
+        this.armFront = this.scene.add.sprite(armFX, armY, `arm-${app.arms}`);
+        this.armBack.setScale(armScale);
+        this.armFront.setScale(armScale);
 
         this.weapon = this.scene.add.sprite(0, 0, 'pistol');
         this.weapon.setOrigin(0.85, 0.5); 
         this.weapon.setVisible(false);
-        this.head = this.scene.add.sprite(0, -10, `head-${app.head}`);
+        this.head = this.scene.add.sprite(0, headY, `head-${app.head}`);
 
         // Grenade Belt (Visual Only)
         this.grenadeBelt = this.scene.add.sprite(0, 15, 'grenade');
@@ -99,21 +111,23 @@ export default class CharacterAssembler {
             this.weapon.setVisible(false);
         }
 
+        const isGoldenRatio = this.type === 'player' || this.type === 'sarge';
+
         if (isCrouching) {
             this.legFront.setTexture(`legBend-${app.legs}`);
             this.legBack.setTexture(`legBend-${app.legs}`);
             this.torso.y = 12;
-            this.head.y = 3;
-            this.armFront.y = 10;
-            this.armBack.y = 10;
+            this.head.y = isGoldenRatio ? 3 : -23;
+            this.armFront.y = isGoldenRatio ? 10 : 7;
+            this.armBack.y = isGoldenRatio ? 10 : 7;
             this.grenadeBelt.y = 27; 
         } else {
             this.legFront.setTexture(`leg-${app.legs}`);
             this.legBack.setTexture(`leg-${app.legs}`);
             this.torso.y = 0;
-            this.head.y = -10;
-            this.armFront.y = -2;
-            this.armBack.y = -2;
+            this.head.y = isGoldenRatio ? -10 : -35;
+            this.armFront.y = isGoldenRatio ? -2 : -5;
+            this.armBack.y = isGoldenRatio ? -2 : -5;
             this.grenadeBelt.y = 15;
 
             if (Math.abs(velocityX) > 10) {
@@ -271,7 +285,64 @@ export default class CharacterAssembler {
         });
     }
 
+    explode() {
+        const pieces = [
+            { s: this.head, name: 'head' },
+            { s: this.torso, name: 'torso' },
+            { s: this.armFront, name: 'armF' },
+            { s: this.armBack, name: 'armB' },
+            { s: this.legFront, name: 'legF' },
+            { s: this.legBack, name: 'legB' }
+        ];
+        
+        pieces.forEach(p => {
+            if (!p.s || !p.s.visible) return;
+            
+            // Get World Position
+            const worldPos = new Phaser.Math.Vector2();
+            p.s.getWorldTransformMatrix().transformPoint(0, 0, worldPos);
+            
+            // Create a temporary DEBRIS sprite (Clone)
+            const debris = this.scene.add.sprite(worldPos.x, worldPos.y, p.s.texture.key);
+            debris.setScale(p.s.scaleX * this.container.scaleX, p.s.scaleY * this.container.scaleY);
+            debris.setRotation(p.s.rotation + this.container.rotation);
+            debris.setDepth(10);
+
+            // Apply Physics to Debris
+            this.scene.physics.add.existing(debris);
+            debris.body.setVelocity(
+                Phaser.Math.Between(-300, 300),
+                Phaser.Math.Between(-400, -200)
+            );
+            debris.body.setAngularVelocity(Phaser.Math.Between(-400, 400));
+            debris.body.setGravityY(1000);
+            debris.body.setBounce(0.3);
+            
+            // Add collision with world/platforms
+            if (this.scene.platforms) {
+                this.scene.physics.add.collider(debris, [this.scene.platforms, this.scene.physicsDetails]);
+            }
+            
+            // Fade and cleanup
+            this.scene.tweens.add({
+                targets: debris,
+                alpha: 0,
+                duration: 1500,
+                delay: 1000,
+                onComplete: () => debris.destroy()
+            });
+        });
+        
+        this.container.setVisible(false);
+    }
+
+    reset() {
+        this.container.setVisible(true);
+        this.refreshTextures();
+    }
+
     refreshTextures() {
+        if (!this.head || !this.head.scene) return; // Safety check
         const store = useGameStore.getState();
         const app = this.type === 'player' ? store.appearance : {
             head: this.type === 'sarge' ? 'sarge' : 'enemy',
