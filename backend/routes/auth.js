@@ -27,7 +27,16 @@ router.post('/register', async (req, res) => {
         const payload = { user: { id: user.id } };
         jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '7d' }, (err, token) => {
             if (err) throw err;
-            res.json({ token, user: { id: user.id, username: user.username, avatarUrl: user.avatarUrl } });
+            res.json({ 
+                token, 
+                user: { 
+                    id: user.id, 
+                    username: user.username, 
+                    avatarUrl: user.avatarUrl,
+                    appearance: user.appearance,
+                    selectedWeapons: user.selectedWeapons
+                } 
+            });
         });
     } catch (err) {
         console.error(err.message);
@@ -53,7 +62,17 @@ router.post('/login', async (req, res) => {
         const payload = { user: { id: user.id } };
         jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '7d' }, (err, token) => {
             if (err) throw err;
-            res.json({ token, user: { id: user.id, username: user.username, avatarUrl: user.avatarUrl, highestWave: user.highestWave } });
+            res.json({ 
+                token, 
+                user: { 
+                    id: user.id, 
+                    username: user.username, 
+                    avatarUrl: user.avatarUrl, 
+                    highestWave: user.highestWave,
+                    appearance: user.appearance,
+                    selectedWeapons: user.selectedWeapons
+                } 
+            });
         });
     } catch (err) {
         console.error(err.message);

@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 export const useGameStore = create((set) => ({
     playerHealth: 100,
@@ -29,9 +30,59 @@ export const useGameStore = create((set) => ({
     setGrenades: (count) => set({ grenades: count }),
     
     setIsNewGame: (val) => set({ isNewGame: val }),
-    setSelectedWeapons: (weapons) => set({ selectedWeapons: weapons }),
-    setAppearance: (parts) => set((state) => ({ appearance: { ...state.appearance, ...parts } })),
+    showHUD: false,
+    setShowHUD: (val) => set({ showHUD: val }),
     
-    login: (token, profile) => set({ userToken: token, userProfile: profile, isGuest: !token }),
-    logout: () => set({ userToken: null, userProfile: null, isGuest: false }),
+    setSelectedWeapons: async (weapons) => {
+        set({ selectedWeapons: weapons });
+        const { userToken } = useGameStore.getState();
+        if (userToken) {
+            try {
+                await fetch(`${API_BASE}/api/score/armory`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'x-auth-token': userToken },
+                    body: JSON.stringify({ selectedWeapons: weapons })
+                });
+            } catch (e) { console.error("Sync error", e); }
+        }
+    },
+
+    setAppearance: async (parts) => {
+        set((state) => ({ appearance: { ...state.appearance, ...parts } }));
+        const { userToken, appearance } = useGameStore.getState();
+        if (userToken) {
+            try {
+                await fetch(`${API_BASE}/api/score/armory`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'x-auth-token': userToken },
+                    body: JSON.stringify({ appearance })
+                });
+            } catch (e) { console.error("Sync error", e); }
+        }
+    },
+    
+    login: (token, profile) => {
+        const defaultAppearance = { head: 'Commando', torso: 'Commando', legs: 'Commando', arms: 'commando' };
+        const defaultWeapons = ['pistol', null];
+        
+        // Ensure profile data is valid and has expected structure
+        const appearance = (profile?.appearance && profile.appearance.head) ? profile.appearance : defaultAppearance;
+        const weapons = (profile?.selectedWeapons && Array.isArray(profile.selectedWeapons) && profile.selectedWeapons.length > 0) ? profile.selectedWeapons : defaultWeapons;
+
+        set({ 
+            userToken: token, 
+            userProfile: profile, 
+            isGuest: !token,
+            appearance: appearance,
+            selectedWeapons: weapons
+        });
+    },
+    
+    logout: () => set({ 
+        userToken: null, 
+        userProfile: null, 
+        isGuest: false,
+        appearance: { head: 'Commando', torso: 'Commando', legs: 'Commando', arms: 'commando' },
+        selectedWeapons: ['pistol', null]
+    }),
 }));

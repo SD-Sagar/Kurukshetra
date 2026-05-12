@@ -220,6 +220,7 @@ export default class Player {
     takeDamage(amount) {
         if (this.isRespawning) return;
         this.health = Math.max(0, this.health - amount);
+        this.syncUI();
         this.lastDamageTime = this.scene.time.now;
 
         if (this.health <= 0) {

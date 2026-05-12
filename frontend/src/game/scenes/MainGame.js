@@ -83,6 +83,8 @@ export default class MainGame extends Phaser.Scene {
         const spawnLayer = map.getObjectLayer('Spawns_And_Pickups');
         this.playerSpawns = [];
         let sargeSpawn = { x: this.worldWidth / 2 - 150, y: this.worldHeight - 300 };
+        // Enable HUD for gameplay
+        useGameStore.getState().setShowHUD(true);
 
         // 1. First Pass: Find Essential Spawn Points
         this.lootPoints = [];
@@ -102,13 +104,14 @@ export default class MainGame extends Phaser.Scene {
 
         // 2. Initialize Hero Characters
         this.player = new Player(this, initialSpawn.x, initialSpawn.y - 50);
-        this.sarge = new SargeAI(this, sargeSpawn.x, sargeSpawn.y, this.player, this.pathfinder);
+        this.sarge = new SargeAI(this, initialSpawn.x - 50, initialSpawn.y - 50, this.player, this.pathfinder);
 
         // 3. Second Pass: Spawn Enemies and Loot (Now safe to access this.player)
+        this.enemySpawnPoints = [];
         if (spawnLayer) {
             spawnLayer.objects.forEach(obj => {
                 if (obj.name === 'enemy_spawn') {
-                    this.spawnEnemyAt(obj.x, obj.y);
+                    this.enemySpawnPoints.push({ x: obj.x, y: obj.y });
                 } else if (obj.name === 'loot_drop') {
                     const point = { x: obj.x, y: obj.y, active: false, index: this.lootPoints.length };
                     this.lootPoints.push(point);
@@ -116,6 +119,9 @@ export default class MainGame extends Phaser.Scene {
                 }
             });
         }
+
+        // Initial Populate
+        for(let i=0; i<10; i++) this.spawnEnemy();
 
         const store = useGameStore.getState();
         this.player.weapons.addWeapon(store.selectedWeapons[0] || 'pistol');
@@ -126,6 +132,12 @@ export default class MainGame extends Phaser.Scene {
                 if (this.sarge) this.sarge.say("Where have you been, Pilot?", 4000);
             });
         }
+
+        // AI Initial Lock (Grounded for dialogue)
+        this.initialAILock = true;
+        this.time.delayedCall(4500, () => {
+            this.initialAILock = false;
+        });
 
         // Colliders
         this.physics.add.collider(this.player.sprite, [this.platforms, this.physicsDetails]);
@@ -235,13 +247,31 @@ export default class MainGame extends Phaser.Scene {
     onPlayerDeath() {
         if (this.player.isRespawning) return;
         this.player.isRespawning = true;
+
+        // Drop current weapon (if not pistol)
+        const currentWeapon = this.player.weapons.inventory[this.player.weapons.currentSlot];
+        if (currentWeapon && currentWeapon !== 'pistol' && currentWeapon !== 'dagger') {
+            this.spawnWeaponPickup(this.player.sprite.x, this.player.sprite.y, currentWeapon);
+        }
         
         // Visual death effect (briefly see pieces before fade)
         this.time.delayedCall(1300, () => this.cameras.main.fadeOut(500, 0, 0, 0));
 
         this.time.delayedCall(2300, () => {
-            // Random Respawn
-            const spawn = this.playerSpawns[Phaser.Math.Between(0, this.playerSpawns.length - 1)];
+            // Find a Safe Respawn Point (No enemies within 400px)
+            const safeSpawns = this.playerSpawns.filter(s => {
+                let tooClose = false;
+                this.enemies.getChildren().forEach(e => {
+                    if (e.active && Phaser.Math.Distance.Between(s.x, s.y, e.x, e.y) < 400) tooClose = true;
+                });
+                return !tooClose;
+            });
+
+            // Fallback to first spawn if all are "hot"
+            const spawn = safeSpawns.length > 0 
+                ? safeSpawns[Phaser.Math.Between(0, safeSpawns.length - 1)] 
+                : this.playerSpawns[0];
+
             this.player.sprite.setPosition(spawn.x, spawn.y);
             this.player.health = 100;
             this.player.fuel = 100;
@@ -340,11 +370,32 @@ export default class MainGame extends Phaser.Scene {
     }
 
     spawnEnemy() {
-        if (this.enemies.countActive() >= 10) return;
-        const cam = this.cameras.main;
-        const spawnX = Math.random() > 0.5 ? cam.scrollX - 400 : cam.scrollX + cam.width + 400;
-        let spawnY = this.player ? this.player.sprite.y - 500 : this.worldHeight / 2;
-        this.spawnEnemyAt(Phaser.Math.Clamp(spawnX, 200, this.worldWidth - 200), Phaser.Math.Clamp(spawnY, 800, this.worldHeight - 500));
+        const activeCount = this.enemies.countActive();
+        if (activeCount >= 10) return;
+
+        // Need to refill
+        const needed = 10 - activeCount;
+        for (let i = 0; i < needed; i++) {
+            // Find a Medium-Distance spawn point (500-1000 pixels)
+            let candidates = this.enemySpawnPoints.filter(s => {
+                const dist = Phaser.Math.Distance.Between(this.player.sprite.x, this.player.sprite.y, s.x, s.y);
+                return dist >= 500 && dist <= 1000;
+            });
+
+            // Fallback: If no medium ones, pick furthest
+            if (candidates.length === 0) {
+                candidates = [...this.enemySpawnPoints].sort((a, b) => {
+                    const distA = Phaser.Math.Distance.Between(this.player.sprite.x, this.player.sprite.y, a.x, a.y);
+                    const distB = Phaser.Math.Distance.Between(this.player.sprite.x, this.player.sprite.y, b.x, b.y);
+                    return distB - distA;
+                });
+            }
+
+            if (candidates.length > 0) {
+                const target = candidates[Math.floor(Math.random() * Math.min(candidates.length, 3))];
+                this.spawnEnemyAt(target.x, target.y);
+            }
+        }
     }
 
     spawnEnemyAt(x, y) {
@@ -505,6 +556,9 @@ export default class MainGame extends Phaser.Scene {
             if (enemy.weaponKey) this.spawnWeaponPickup(enemy.x, enemy.y, enemy.weaponKey);
             if (enemy.visual) enemy.visual.explode();
             enemy.destroy();
+            
+            // Instantly trigger refill
+            this.time.delayedCall(500, () => this.spawnEnemy());
         }
     }
 
@@ -521,7 +575,7 @@ export default class MainGame extends Phaser.Scene {
 
     update(time, delta) {
         if (this.player) this.player.update(time, delta, this.input.activePointer);
-        if (this.sarge) this.sarge.update(time, delta, this.enemies);
+        if (this.sarge) this.sarge.update(time, delta, this.enemies, this.initialAILock);
 
         // Update all enemies
         this.enemies.getChildren().forEach(enemy => {
@@ -591,7 +645,7 @@ export default class MainGame extends Phaser.Scene {
             const accel = 600;
             
             // --- MOVEMENT EXECUTION ---
-            if (enemy.isEvading) {
+            if (enemy.isEvading && !this.initialAILock) {
                 enemy.setAccelerationX(accel * 2.5 * enemy.evadeDir);
                 enemy.setAccelerationY(-2400); 
                 if (time % 100 < 40) this.enemyJetpackParticles.emitParticleAt(enemy.x, enemy.y + 40);
@@ -623,11 +677,13 @@ export default class MainGame extends Phaser.Scene {
 
                 // Vertical Logic (Smart Jetpack to Target)
                 let thrustPower = 0;
-                if (enemy.y > moveTarget.y + 20 && !isBlockedUp) {
-                    const dy = Math.abs(enemy.y - moveTarget.y);
-                    thrustPower = Math.min(2200, 1000 + dy * 5);
-                } else if (isBlockedSide && !isBlockedUp) {
-                    thrustPower = 1800; // Hop
+                if (!this.initialAILock) {
+                    if (enemy.y > moveTarget.y + 20 && !isBlockedUp) {
+                        const dy = Math.abs(enemy.y - moveTarget.y);
+                        thrustPower = Math.min(2200, 1000 + dy * 5);
+                    } else if (isBlockedSide && !isBlockedUp) {
+                        thrustPower = 1800; // Hop
+                    }
                 }
 
                 if (thrustPower > 0) {

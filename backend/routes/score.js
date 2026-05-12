@@ -47,4 +47,23 @@ router.post('/update', authMiddleware, async (req, res) => {
     }
 });
 
+// Update armory loadout and appearance
+router.put('/armory', authMiddleware, async (req, res) => {
+    try {
+        const { appearance, selectedWeapons } = req.body;
+        
+        let user = await User.findById(req.user.id);
+        if (!user) return res.status(404).json({ message: 'User not found' });
+
+        if (appearance) user.appearance = appearance;
+        if (selectedWeapons) user.selectedWeapons = selectedWeapons;
+
+        await user.save();
+        res.json({ appearance: user.appearance, selectedWeapons: user.selectedWeapons });
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+});
+
 module.exports = router;

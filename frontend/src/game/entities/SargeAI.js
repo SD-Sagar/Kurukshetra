@@ -61,9 +61,16 @@ export default class SargeAI {
     say(text, duration = 3000) {
         if (this.speech) this.speech.destroy();
 
-        const bubble = this.scene.add.container(0, 0);
-        const bg = this.scene.add.rectangle(0, -100, 200, 50, 0x000000, 0.8).setStrokeStyle(2, 0xffffff);
-        const txt = this.scene.add.text(0, -100, text, { font: '16px monospace', fill: '#ffffff' }).setOrigin(0.5);
+        const bubble = this.scene.add.container(0, 0).setDepth(100);
+        const txt = this.scene.add.text(0, -100, text, { 
+            font: '16px monospace', 
+            fill: '#ffffff',
+            backgroundColor: 'rgba(0,0,0,0.8)',
+            padding: { x: 10, y: 5 }
+        }).setOrigin(0.5);
+
+        // Add a stroke to the background
+        const bg = this.scene.add.rectangle(0, -100, txt.width + 10, txt.height + 10, 0x000000, 0).setStrokeStyle(2, 0xffffff);
 
         bubble.add([bg, txt]);
         this.speech = bubble;
@@ -74,7 +81,7 @@ export default class SargeAI {
         });
     }
 
-    update(time, delta, enemiesGroup) {
+    update(time, delta, enemiesGroup, lockJetpack = false) {
         if (!this.sprite || !this.sprite.active || !this.sprite.body) return;
 
         const playerSprite = this.player.sprite;
@@ -170,7 +177,7 @@ export default class SargeAI {
         const isBelowPlayer = this.sprite.y > playerSprite.y + 60;
 
         // --- MOVEMENT EXECUTION ---
-        if (this.isEvading) {
+        if (this.isEvading && !lockJetpack) {
             this.sprite.setAccelerationX(accel * 2.5 * this.evadeDir);
             this.sprite.setAccelerationY(-2400); 
             if (time % 100 < 40) this.jetpackParticles.emitParticleAt(this.sprite.x, this.sprite.y + 40);
@@ -186,11 +193,13 @@ export default class SargeAI {
 
             // Vertical Follow Waypoint
             let thrustPower = 0;
-            if (this.sprite.y > moveTarget.y + 20 && !isBlockedUp) {
-                const dy = Math.abs(this.sprite.y - moveTarget.y);
-                thrustPower = Math.min(2200, 1000 + dy * 5);
-            } else if (isBlockedSide && !isBlockedUp) {
-                thrustPower = 1800; // Hop over obstacles
+            if (!lockJetpack) {
+                if (this.sprite.y > moveTarget.y + 20 && !isBlockedUp) {
+                    const dy = Math.abs(this.sprite.y - moveTarget.y);
+                    thrustPower = Math.min(2200, 1000 + dy * 5);
+                } else if (isBlockedSide && !isBlockedUp) {
+                    thrustPower = 1800; // Hop over obstacles
+                }
             }
 
             if (thrustPower > 0) {

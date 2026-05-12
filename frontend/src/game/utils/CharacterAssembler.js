@@ -21,13 +21,25 @@ export default class CharacterAssembler {
 
         // Configuration based on type
         const isGoldenRatio = this.type === 'player' || this.type === 'sarge';
-        const headY = isGoldenRatio ? -10 : -35;
-        const armY = isGoldenRatio ? -2 : -5;
-        const armFX = isGoldenRatio ? -23 : 15;
-        const armBX = isGoldenRatio ? 8 : -15;
-        const legY = isGoldenRatio ? 28 : 20;
+        
+        // Define standard offsets
+        this.offsets = {
+            headY: isGoldenRatio ? -10 : -35,
+            armY: this.type === 'sarge' ? -28 : (this.type === 'player' ? -23 : -5), // Sarge needs a specific lift for his assets
+            armFX: isGoldenRatio ? -23 : 15,
+            armBX: isGoldenRatio ? 8 : -15,
+            legY: isGoldenRatio ? 28 : 20
+        };
+
+        const headY = this.offsets.headY;
+        const armY = this.offsets.armY;
+        const armFX = this.offsets.armFX;
+        const armBX = this.offsets.armBX;
+        const legY = this.offsets.legY;
+        
         const legScale = isGoldenRatio ? 1.3 : 1.0;
-        const armScale = isGoldenRatio ? 1.2 : 1.0;
+        this.armScale = isGoldenRatio ? 1.2 : 1.0;
+        const armScale = this.armScale;
 
         this.legBack = this.scene.add.sprite(-8, legY, `leg-${app.legs}`);
         this.legFront = this.scene.add.sprite(8, legY, `leg-${app.legs}`);
@@ -117,17 +129,17 @@ export default class CharacterAssembler {
             this.legFront.setTexture(`legBend-${app.legs}`);
             this.legBack.setTexture(`legBend-${app.legs}`);
             this.torso.y = 12;
-            this.head.y = isGoldenRatio ? 3 : -23;
-            this.armFront.y = isGoldenRatio ? 10 : 7;
-            this.armBack.y = isGoldenRatio ? 10 : 7;
+            this.head.y = this.offsets.headY + 13;
+            this.armFront.y = this.offsets.armY + 12;
+            this.armBack.y = this.offsets.armY + 12;
             this.grenadeBelt.y = 27; 
         } else {
             this.legFront.setTexture(`leg-${app.legs}`);
             this.legBack.setTexture(`leg-${app.legs}`);
             this.torso.y = 0;
-            this.head.y = isGoldenRatio ? -10 : -35;
-            this.armFront.y = isGoldenRatio ? -2 : -5;
-            this.armBack.y = isGoldenRatio ? -2 : -5;
+            this.head.y = this.offsets.headY;
+            this.armFront.y = this.offsets.armY;
+            this.armBack.y = this.offsets.armY;
             this.grenadeBelt.y = 15;
 
             if (Math.abs(velocityX) > 10) {
@@ -191,7 +203,7 @@ export default class CharacterAssembler {
         // 3. Locked-Grip: Position weapon at the Hand (End of Arm)
         if (this.currentWeaponColor !== null) {
             // Precise hand offset (The hand is at the bottom of the arm sprite)
-            const armVisualLength = 42 * this.baseScale;
+            const armVisualLength = 42 * this.baseScale * this.armScale;
 
             // The arm points "Down" at 0 rotation, so we add PI/2 to get the pointing vector
             const armAngle = this.armFront.rotation + Math.PI / 2;
@@ -227,16 +239,35 @@ export default class CharacterAssembler {
         // The PNG points LEFT, so 0 rotation is Left. We adjust based on flip.
         const worldRotation = this.weapon.rotation + (flip < 0 ? 0 : Math.PI);
         
-        // 3. Project Muzzle Tip (Gun tip is about 50px from handle)
+        // 3. Project Muzzle Tip (Gun tip is about 55px from handle)
+        const isGoldenRatio = this.type === 'player' || this.type === 'sarge';
         const muzzleDist = 55 * this.baseScale;
-        const spawnX = handX + Math.cos(worldRotation) * muzzleDist;
-        const spawnY = handY + Math.sin(worldRotation) * muzzleDist;
-
-        // DEBUG: Uncomment to see the muzzle tip in game
-        /*
-        if (!this.muzzleDebug) this.muzzleDebug = this.scene.add.circle(0, 0, 4, 0xff0000).setDepth(100);
-        this.muzzleDebug.setPosition(spawnX, spawnY);
-        */
+        
+        // Per-Weapon Barrel Alignment (Only for Sarge/Player)
+        let barrelRise = 0;
+        if (isGoldenRatio) {
+            const weaponKey = this.currentWeaponColor; // e.g. 'pistol', 'rifle'
+            const weaponOffsets = {
+                'pistol': -12,
+                'smg': -14,
+                'rifle': -16,
+                'machinegun': -16,
+                'shotgun': -12,
+                'tacticalshotgun': -12,
+                'sniper': -4, // Perfect as is
+                'launcher': -14,
+                'sarge_smg': -14
+            };
+            
+            const offset = weaponOffsets[weaponKey] || -8; // Default fallback
+            barrelRise = offset * this.baseScale * flip;
+        }
+        
+        // Perpendicular angle for barrel rise
+        const perpRotation = worldRotation + Math.PI / 2;
+        
+        const spawnX = handX + Math.cos(worldRotation) * muzzleDist + Math.cos(perpRotation) * barrelRise;
+        const spawnY = handY + Math.sin(worldRotation) * muzzleDist + Math.sin(perpRotation) * barrelRise;
 
         return { x: spawnX, y: spawnY };
     }

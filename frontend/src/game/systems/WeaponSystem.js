@@ -86,16 +86,16 @@ export default class WeaponSystem {
 
             for (let i = 0; i < wp.pellets; i++) {
                 const angle = startAngle + (step * i);
-                const tx = startX + Math.cos(angle) * 100;
-                const ty = startY + Math.sin(angle) * 100;
+                const tx = startX + Math.cos(angle) * 2000;
+                const ty = startY + Math.sin(angle) * 2000;
                 this.spawnBullet(tx, ty, wp);
             }
         } else if (wp.spread > 0) {
             // DYNAMIC WOBBLE (SMG/RIFLE)
             const wobble = (Math.random() - 0.5) * wp.spread;
             const finalAngle = baseAngle + wobble;
-            const tx = startX + Math.cos(finalAngle) * 100;
-            const ty = startY + Math.sin(finalAngle) * 100;
+            const tx = startX + Math.cos(finalAngle) * 2000;
+            const ty = startY + Math.sin(finalAngle) * 2000;
             this.spawnBullet(tx, ty, wp);
         } else {
             this.spawnBullet(targetX, targetY, wp);

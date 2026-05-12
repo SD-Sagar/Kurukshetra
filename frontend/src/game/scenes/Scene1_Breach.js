@@ -6,6 +6,7 @@ export default class Scene1_Breach extends Phaser.Scene {
     }
 
     create() {
+        useGameStore.getState().setShowHUD(false);
         const { width, height } = this.cameras.main;
 
         // Cracked Monitor Effect Backdrop (Dark Gray/Black)

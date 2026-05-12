@@ -8,6 +8,7 @@ export default class Scene2_Recruitment extends Phaser.Scene {
     }
 
     create() {
+        useGameStore.getState().setShowHUD(false);
         const { width, height } = this.cameras.main;
         
         // Background: Cave Floor (Side View)
