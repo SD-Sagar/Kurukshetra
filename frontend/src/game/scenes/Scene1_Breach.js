@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { useGameStore } from '../../store/gameStore';
 
 export default class Scene1_Breach extends Phaser.Scene {
     constructor() {

@@ -11,41 +11,61 @@ export default class Scene2_Recruitment extends Phaser.Scene {
         useGameStore.getState().setShowHUD(false);
         const { width, height } = this.cameras.main;
         
-        // Background: Cave Floor (Side View)
-        this.add.rectangle(0, 0, width, height, 0x050505).setOrigin(0, 0); // Dark cave
-        this.add.rectangle(0, height - 100, width, 100, 0x1A1A1A).setOrigin(0, 0); // Floor
+        // 1. Initialize Tilemap
+        const map = this.make.tilemap({ key: 'recruitment_map' });
+        const tileset = map.addTilesetImage('recruit-scene', 'tileset_recruit');
         
-        // Add dust falling effect
-        this.dustParticles = this.add.particles(0, -50, 'dust', {
-            x: { min: 0, max: width },
-            y: 0,
-            speedY: { min: 20, max: 50 },
-            lifespan: 5000,
-            scale: { start: 2, end: 0 },
-            alpha: { start: 0.5, end: 0 },
-            frequency: 100,
-            tint: 0x555555
-        });
+        // Create Layers
+        const bgLayer = map.createLayer('Background', tileset, 0, 0);
+        const floorLayer = map.createLayer('Floor', tileset, 0, 0);
+        floorLayer.setCollisionByProperty({ collides: true });
+        floorLayer.setCollisionBetween(1, 9999); // Force all tiles to be solid
+        const decorLayer = map.createLayer('Decor', tileset, 0, 0);
 
-        // Sarge Modular Assembly (Full Body)
+        // 2. Fetch Spawn Points from Object Layer
+        const objLayer = map.getObjectLayer('Objects');
+        let sargeStart = { x: -200, y: height - 130 };
+        let playerStart = { x: width / 2 + 100, y: height - 110 };
+
+        if (objLayer) {
+            objLayer.objects.forEach(obj => {
+                if (obj.name === 'sarge_spawn') sargeStart = { x: obj.x, y: obj.y };
+                if (obj.name === 'player_spawn') playerStart = { x: obj.x, y: obj.y };
+            });
+        }
+
+        // 3. Assemble Characters with Cinematic Physics
         this.sarge = new CharacterAssembler(this, { type: 'sarge' });
-        this.sarge.container.setPosition(-200, height - 130); 
+        this.sarge.container.setPosition(sargeStart.x, sargeStart.y);
+        this.sarge.container.setDepth(10);
         
-        // Player Modular Assembly (Full Body - Lying down)
+        // Add Physics to Sarge
+        this.physics.add.existing(this.sarge.container);
+        this.sarge.container.body.setSize(60, 140);
+        this.sarge.container.body.setOffset(-30, -70); // Adjust to feet level
+        this.physics.add.collider(this.sarge.container, floorLayer);
+        
         this.player = new CharacterAssembler(this, { type: 'player' });
-        this.player.container.setPosition(width / 2 + 100, height - 110);
+        this.player.container.setPosition(playerStart.x, playerStart.y);
         this.player.container.setAngle(-90); // Lying on floor
+        this.player.container.setDepth(10);
         this.player.setExpression('shock');
+
+        // Add Physics to Player (Horizontal Hitbox for lying down)
+        this.physics.add.existing(this.player.container);
+        this.player.container.body.setSize(140, 60);
+        this.player.container.body.setOffset(-70, -30);
+        this.physics.add.collider(this.player.container, floorLayer);
 
         // Dialogue System (Pinned to Sarge)
         this.bubble = this.add.graphics();
         this.bubble.fillStyle(0x000000, 0.7); // Dark background for contrast
         this.bubble.lineStyle(2, 0xFFFFFF, 1); // White border
-        this.bubble.fillRoundedRect(-150, -250, 300, 80, 15);
-        this.bubble.strokeRoundedRect(-150, -250, 300, 80, 15);
+        this.bubble.fillRoundedRect(-150, -180, 300, 80, 15);
+        this.bubble.strokeRoundedRect(-150, -180, 300, 80, 15);
 
         this.username = useGameStore.getState().userProfile?.username || 'Recruit';
-        this.dialogueText = this.add.text(0, -210, '', {
+        this.dialogueText = this.add.text(0, -140, '', {
             font: 'bold 16px monospace',
             fill: '#FFFFFF',
             align: 'center',
@@ -125,11 +145,16 @@ export default class Scene2_Recruitment extends Phaser.Scene {
     pullPlayerUp() {
         this.hideDialogue();
 
+        // Update physics body to Standing (Vertical)
+        if (this.player.container.body) {
+            this.player.container.body.setSize(60, 140);
+            this.player.container.body.setOffset(-30, -70);
+        }
+
         // Player stands up
         this.tweens.add({
             targets: this.player.container,
             angle: 0,
-            y: this.cameras.main.height - 130,
             duration: 800,
             ease: 'Back.easeOut',
             onComplete: () => {

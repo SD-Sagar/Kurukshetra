@@ -72,10 +72,13 @@ export default class Preloader extends Phaser.Scene {
         this.load.image('tacticalshotgun', 'assets/weapons/tacticalshotgun.png');
         this.load.image('bullet', 'assets/weapons/bullet.png');
 
-        // Map Assets
-        this.load.tilemapTiledJSON('map', 'assets/maps/map.json');
         this.load.image('tileset_background', 'assets/maps/background.png');
         this.load.image('tileset_70', 'assets/maps/tileset_70.png');
+        this.load.image('tileset_recruit', 'assets/maps/recruit-scene.png');
+        
+        // Map Assets
+        this.load.tilemapTiledJSON('map', 'assets/maps/map.json');
+        this.load.tilemapTiledJSON('recruitment_map', 'assets/maps/recruitment.json');
 
         // --- NEW CUSTOMIZATION ASSETS ---
         
