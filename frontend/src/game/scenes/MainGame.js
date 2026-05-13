@@ -539,6 +539,15 @@ export default class MainGame extends Phaser.Scene {
         } else {
             spawnB(baseAngle);
         }
+
+        // --- ENEMY PROXIMITY AUDIO ---
+        const distToPlayer = Phaser.Math.Distance.Between(enemy.x, enemy.y, this.player.sprite.x, this.player.sprite.y);
+        if (distToPlayer < 1680 && stats.sound) {
+            // Dynamic volume: 0.4 at close range, fading to 0.05 at 1680px
+            const falloff = 1 - (distToPlayer / 1680);
+            const volume = Math.max(0.05, 0.4 * falloff);
+            this.sound.play(stats.sound, { volume });
+        }
     }
 
     bulletHitEnemy(bullet, enemy) {

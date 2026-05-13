@@ -117,6 +117,16 @@ export default class Preloader extends Phaser.Scene {
         // Meds
         this.load.image('medkit', 'assets/meds/med.png');
 
+        // Sounds
+        this.load.audio('dagger_sound', 'assets/sounds/dagger_sound.mp3');
+        this.load.audio('granade_sound', 'assets/sounds/granade_sound.mp3');
+        this.load.audio('missile-blast_sound', 'assets/sounds/missile-blast_sound.mp3');
+        this.load.audio('pistol_sound', 'assets/sounds/pistol_sound.mp3');
+        this.load.audio('rifle_sound', 'assets/sounds/rifle_sound.mp3');
+        this.load.audio('rocket-launcher_sound', 'assets/sounds/rocket-launcher_sound.mp3');
+        this.load.audio('shotgun_sound', 'assets/sounds/shotgun_sound.mp3');
+        this.load.audio('sniper_sound', 'assets/sounds/sniper_sound.mp3');
+
         this.load.on('loaderror', (fileObj) => {
             console.error(`Failed to load asset: ${fileObj.key} from ${fileObj.url}`);
         });

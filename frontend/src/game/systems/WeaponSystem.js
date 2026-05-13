@@ -15,16 +15,16 @@ export default class WeaponSystem {
 
         // Tactical Archetypes
         this.weaponData = {
-            pistol: { name: 'Pistol', damage: 15, range: 2000, muzzleSpeed: 1000, fireRate: 400, magSize: 12, reloadTime: 1500, color: 0xffffff, key: 'pistol' },
-            smg: { name: 'SMG', damage: 8, range: 4000, muzzleSpeed: 1200, fireRate: 80, magSize: 30, reloadTime: 1500, spread: 0.08, color: 0x00ffff, key: 'smg' },
-            rifle: { name: 'Rifle', damage: 20, range: 8000, muzzleSpeed: 1300, fireRate: 110, magSize: 20, reloadTime: 2000, spread: 0.08, color: 0x00ff00, key: 'rifle' },
-            sniper: { name: 'Sniper', damage: 85, range: 16000, muzzleSpeed: 2500, fireRate: 1500, magSize: 5, reloadTime: 3500, isTracer: true, color: 0xff00ff, key: 'sniper' },
-            shotgun: { name: 'Shotgun', damage: 10, range: 800, muzzleSpeed: 900, fireRate: 800, magSize: 6, reloadTime: 2000, pellets: 8, fanAngle: 30, spread: 0.3, color: 0xffff00, key: 'shotgun' },
-            launcher: { name: 'Launcher', damage: 100, range: 16000, muzzleSpeed: 600, fireRate: 2000, magSize: 3, reloadTime: 2500, isRocket: true, color: 0xff4500, key: 'launcher' },
-            sarge_smg: { name: 'Sarge SMG', damage: 15, range: 6000, muzzleSpeed: 1200, fireRate: 110, magSize: 50, reloadTime: 2000, spread: 0.05, color: 0xffd700, key: 'sarge_smg' },
-            dagger: { name: 'Dagger', damage: 35, range: 70, muzzleSpeed: 0, fireRate: 400, magSize: 999, reloadTime: 0, isMelee: true, color: 0xcccccc, key: 'dagger' },
-            machinegun: { name: 'Machine Gun', damage: 20, range: 8000, muzzleSpeed: 1300, fireRate: 80, magSize: 100, reloadTime: 2500, spread: 0.12, color: 0x00ff88, key: 'machinegun' },
-            tacticalshotgun: { name: 'Tactical Shotgun', damage: 8, range: 1000, muzzleSpeed: 1000, fireRate: 400, magSize: 10, reloadTime: 1500, pellets: 6, fanAngle: 25, spread: 0.2, color: 0xff8800, key: 'tacticalshotgun' }
+            pistol: { name: 'Pistol', damage: 15, range: 2000, muzzleSpeed: 1000, fireRate: 400, magSize: 12, reloadTime: 1500, color: 0xffffff, key: 'pistol', sound: 'pistol_sound' },
+            smg: { name: 'SMG', damage: 8, range: 4000, muzzleSpeed: 1200, fireRate: 80, magSize: 30, reloadTime: 1500, spread: 0.08, color: 0x00ffff, key: 'smg', sound: 'pistol_sound' },
+            rifle: { name: 'Rifle', damage: 20, range: 8000, muzzleSpeed: 1300, fireRate: 110, magSize: 20, reloadTime: 2000, spread: 0.08, color: 0x00ff00, key: 'rifle', sound: 'rifle_sound' },
+            sniper: { name: 'Sniper', damage: 85, range: 16000, muzzleSpeed: 2500, fireRate: 1500, magSize: 5, reloadTime: 3500, isTracer: true, color: 0xff00ff, key: 'sniper', sound: 'sniper_sound' },
+            shotgun: { name: 'Shotgun', damage: 10, range: 800, muzzleSpeed: 900, fireRate: 800, magSize: 6, reloadTime: 2000, pellets: 8, fanAngle: 30, spread: 0.3, color: 0xffff00, key: 'shotgun', sound: 'shotgun_sound' },
+            launcher: { name: 'Launcher', damage: 100, range: 16000, muzzleSpeed: 600, fireRate: 2000, magSize: 3, reloadTime: 2500, isRocket: true, color: 0xff4500, key: 'launcher', sound: 'rocket-launcher_sound' },
+            sarge_smg: { name: 'Sarge SMG', damage: 15, range: 6000, muzzleSpeed: 1200, fireRate: 110, magSize: 50, reloadTime: 2000, spread: 0.05, color: 0xffd700, key: 'sarge_smg', sound: 'rifle_sound' },
+            dagger: { name: 'Dagger', damage: 35, range: 70, muzzleSpeed: 0, fireRate: 400, magSize: 999, reloadTime: 0, isMelee: true, color: 0xcccccc, key: 'dagger', sound: 'dagger_sound' },
+            machinegun: { name: 'Machine Gun', damage: 20, range: 8000, muzzleSpeed: 1300, fireRate: 80, magSize: 100, reloadTime: 2500, spread: 0.12, color: 0x00ff88, key: 'machinegun', sound: 'rifle_sound' },
+            tacticalshotgun: { name: 'Tactical Shotgun', damage: 8, range: 1000, muzzleSpeed: 1000, fireRate: 400, magSize: 10, reloadTime: 1500, pellets: 6, fanAngle: 25, spread: 0.2, color: 0xff8800, key: 'tacticalshotgun', sound: 'shotgun_sound' }
         };
 
         this.inventory = [null, null]; 
@@ -100,12 +100,18 @@ export default class WeaponSystem {
         } else {
             this.spawnBullet(targetX, targetY, wp);
         }
+
+        // Play Sound
+        if (wp.sound) {
+            this.scene.sound.play(wp.sound, { volume: 0.6 });
+        }
     }
 
     performMelee(targetX, targetY, wp) {
         if (this.visual && this.visual.playMeleeAnimation) {
             this.visual.playMeleeAnimation();
         }
+        this.scene.sound.play('dagger_sound', { volume: 0.5 });
 
         // Damage check
         const startX = this.owner.x;
@@ -139,6 +145,9 @@ export default class WeaponSystem {
             tint: 0xff00ff // Pink Blast
         });
         this.scene.time.delayedCall(600, () => particles.destroy());
+
+        // Play Explosion Sound
+        this.scene.sound.play('missile-blast_sound', { volume: 0.8 });
 
         // Splash Damage Targets Check
         const targets = [];
@@ -338,6 +347,7 @@ export default class WeaponSystem {
             this.scene.time.delayedCall(3000, () => {
                 if (grenade.active) {
                     this.createExplosion(grenade.x, grenade.y, 150, 100, this.owner);
+                    this.scene.sound.play('granade_sound', { volume: 0.8 });
                     grenade.destroy();
                 }
             });
