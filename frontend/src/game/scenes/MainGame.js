@@ -325,7 +325,7 @@ export default class MainGame extends Phaser.Scene {
     }
 
     spawnNewLootAtPoint(point) {
-        const keys = ['pistol', 'smg', 'rifle', 'shotgun', 'sniper', 'launcher', 'machinegun', 'tacticalshotgun', 'grenade'];
+        const keys = ['pistol', 'smg', 'rifle', 'shotgun', 'sniper', 'launcher', 'machinegun', 'tacticalshotgun', 'grenade', 'medkit'];
         const key = keys[Phaser.Math.Between(0, keys.length - 1)];
         this.spawnWeaponPickup(point.x, point.y, key, null, true, point.index);
         point.active = true;
@@ -343,6 +343,8 @@ export default class MainGame extends Phaser.Scene {
         if (weaponKey === 'grenade') {
             pickup.setDisplaySize(33, 33); // Match grenade belt size
             pickup.ammo = { count: 3 };
+        } else if (weaponKey === 'medkit') {
+            pickup.setDisplaySize(75, 40);
         } else {
             const wpData = this.player.weapons.weaponData[weaponKey];
             pickup.setDisplaySize(60, 30);
@@ -562,10 +564,10 @@ export default class MainGame extends Phaser.Scene {
 
             // Add slight screen shake
             this.cameras.main.shake(100, 0.01);
-            
+
             if (enemy.weaponKey) this.spawnWeaponPickup(enemy.x, enemy.y, enemy.weaponKey);
             if (enemy.visual) enemy.visual.explode();
-            
+
             enemy.destroy();
 
             // Instantly trigger refill

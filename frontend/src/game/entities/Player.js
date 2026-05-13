@@ -182,6 +182,14 @@ export default class Player {
                 return;
             }
 
+            // MEDKIT PICKUP
+            if (nearest.weaponKey === 'medkit') {
+                this.health = 100;
+                this.syncUI();
+                nearest.destroy();
+                return;
+            }
+
             // 1. Check if we already have this weapon in ANY slot
             const duplicateSlot = this.weapons.inventory.indexOf(nearest.weaponKey);
 

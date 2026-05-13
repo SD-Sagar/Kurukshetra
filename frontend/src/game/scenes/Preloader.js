@@ -114,6 +114,9 @@ export default class Preloader extends Phaser.Scene {
             this.load.image(`legBend-${l}`, `assets/characters/player/legs/legBend-${l}.png`);
         });
 
+        // Meds
+        this.load.image('medkit', 'assets/meds/med.png');
+
         this.load.on('loaderror', (fileObj) => {
             console.error(`Failed to load asset: ${fileObj.key} from ${fileObj.url}`);
         });
