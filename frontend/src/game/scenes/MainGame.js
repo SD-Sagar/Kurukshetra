@@ -11,6 +11,9 @@ export default class MainGame extends Phaser.Scene {
     }
 
     create() {
+        useGameStore.getState().setHasProgress(true);
+        this.kills = 0;
+        this.wave = 1;
         // Generate placeholder textures
         const g = this.make.graphics({ x: 0, y: 0, add: false });
         g.fillStyle(0xFFFF00); g.fillRect(0, 0, 8, 8); g.generateTexture('bullet_player', 8, 8);
@@ -23,7 +26,7 @@ export default class MainGame extends Phaser.Scene {
 
         // Tiled Map Integration
         const map = this.make.tilemap({ key: 'map' });
-        
+
         // Map Tilesets
         const bgTileset = map.addTilesetImage('background', 'tileset_background');
         const mainTileset = map.addTilesetImage('tileset_70', 'tileset_70', 70, 70, 0, 2);
@@ -121,7 +124,7 @@ export default class MainGame extends Phaser.Scene {
         }
 
         // Initial Populate
-        for(let i=0; i<10; i++) this.spawnEnemy();
+        for (let i = 0; i < 10; i++) this.spawnEnemy();
 
         const store = useGameStore.getState();
         this.player.weapons.addWeapon(store.selectedWeapons[0] || 'pistol');
@@ -171,7 +174,7 @@ export default class MainGame extends Phaser.Scene {
         this.uiZoomLevels = [1, 2, 4]; // 1x, 2x, 4x of base
         this.updateBaseZoom();
         this.applyCurrentZoom();
-        
+
         // Re-calculate on window resize
         this.scale.on('resize', () => {
             this.updateBaseZoom();
@@ -253,7 +256,7 @@ export default class MainGame extends Phaser.Scene {
         if (currentWeapon && currentWeapon !== 'pistol' && currentWeapon !== 'dagger') {
             this.spawnWeaponPickup(this.player.sprite.x, this.player.sprite.y, currentWeapon);
         }
-        
+
         // Visual death effect (briefly see pieces before fade)
         this.time.delayedCall(1300, () => this.cameras.main.fadeOut(500, 0, 0, 0));
 
@@ -268,8 +271,8 @@ export default class MainGame extends Phaser.Scene {
             });
 
             // Fallback to first spawn if all are "hot"
-            const spawn = safeSpawns.length > 0 
-                ? safeSpawns[Phaser.Math.Between(0, safeSpawns.length - 1)] 
+            const spawn = safeSpawns.length > 0
+                ? safeSpawns[Phaser.Math.Between(0, safeSpawns.length - 1)]
                 : this.playerSpawns[0];
 
             this.player.sprite.setPosition(spawn.x, spawn.y);
@@ -330,9 +333,9 @@ export default class MainGame extends Phaser.Scene {
 
     spawnWeaponPickup(x, y, weaponKey, ammo = null, isPermanent = false, pointIndex = -1) {
         if (!this.player || !this.player.weapons) return;
-        
+
         const pickup = this.weaponPickups.create(x, y, weaponKey);
-        pickup.setTint(0xffffff); 
+        pickup.setTint(0xffffff);
         pickup.weaponKey = weaponKey;
         pickup.isPermanent = isPermanent;
         pickup.pointIndex = pointIndex;
@@ -347,7 +350,7 @@ export default class MainGame extends Phaser.Scene {
         }
 
         pickup.body.setSize(40, 20).setBounce(0.5).setDrag(100);
-        
+
         if (!isPermanent) {
             pickup.body.setVelocity(Phaser.Math.Between(-100, 100), -200);
             this.time.delayedCall(10000, () => { if (pickup.active) pickup.destroy(); });
@@ -362,7 +365,7 @@ export default class MainGame extends Phaser.Scene {
         if (pointIndex === -1) return;
         const point = this.lootPoints[pointIndex];
         point.active = false;
-        
+
         // 15 Second Respawn Timer
         this.time.delayedCall(15000, () => {
             this.spawnNewLootAtPoint(point);
@@ -543,7 +546,11 @@ export default class MainGame extends Phaser.Scene {
         enemy.health -= bullet.damage || 15;
         bullet.destroy();
 
-        if (enemy.health <= 0) {
+        if (enemy.health <= 0 && !enemy.isDying) {
+            enemy.isDying = true;
+            this.kills++;
+            useGameStore.getState().updateStats(1, this.wave);
+
             const particles = this.add.particles(enemy.x, enemy.y, 'explosion_part', {
                 speed: { min: 100, max: 300 },
                 lifespan: 500,
@@ -553,10 +560,14 @@ export default class MainGame extends Phaser.Scene {
             });
             this.time.delayedCall(500, () => particles.destroy());
 
+            // Add slight screen shake
+            this.cameras.main.shake(100, 0.01);
+            
             if (enemy.weaponKey) this.spawnWeaponPickup(enemy.x, enemy.y, enemy.weaponKey);
             if (enemy.visual) enemy.visual.explode();
-            enemy.destroy();
             
+            enemy.destroy();
+
             // Instantly trigger refill
             this.time.delayedCall(500, () => this.spawnEnemy());
         }
@@ -580,7 +591,7 @@ export default class MainGame extends Phaser.Scene {
         // Update all enemies
         this.enemies.getChildren().forEach(enemy => {
             if (!enemy.active) return;
-            
+
             // 1. Visual Sync
             enemy.visual.container.setPosition(enemy.x, enemy.y + 10);
             enemy.visual.update(time, delta, enemy.body.velocity.x, false, enemy.weaponKey);
@@ -620,7 +631,7 @@ export default class MainGame extends Phaser.Scene {
             let moveTarget = { x: this.player.sprite.x, y: this.player.sprite.y };
             if (enemy.path && enemy.path.length > 0 && enemy.currentPathIndex < enemy.path.length) {
                 moveTarget = enemy.path[enemy.currentPathIndex];
-                
+
                 // Advance waypoint if close
                 const distToWaypoint = Phaser.Math.Distance.Between(enemy.x, enemy.y, moveTarget.x, moveTarget.y);
                 if (distToWaypoint < 40) {
@@ -631,33 +642,33 @@ export default class MainGame extends Phaser.Scene {
             // Trigger Panic Evade
             if (enemy.stuckTime > 1000) {
                 enemy.isEvading = true;
-                enemy.evadeTimer = time + 800; 
+                enemy.evadeTimer = time + 800;
                 enemy.evadeDir = Math.random() > 0.5 ? 1 : -1;
                 enemy.stuckTime = 0;
             }
             if (enemy.isEvading && time > enemy.evadeTimer) enemy.isEvading = false;
 
             // Tactical Distance based on Weapon
-            let idealDist = 300; 
+            let idealDist = 300;
             if (enemy.weaponKey === 'sniper' || enemy.weaponKey === 'rifle') idealDist = 600;
             if (enemy.weaponKey === 'shotgun' || enemy.weaponKey === 'smg') idealDist = 100;
 
             const accel = 600;
-            
+
             // --- MOVEMENT EXECUTION ---
             if (enemy.isEvading && !this.initialAILock) {
                 enemy.setAccelerationX(accel * 2.5 * enemy.evadeDir);
-                enemy.setAccelerationY(-2400); 
+                enemy.setAccelerationY(-2400);
                 if (time % 100 < 40) this.enemyJetpackParticles.emitParticleAt(enemy.x, enemy.y + 40);
             }
             else {
                 // Horizontal Move to Target
                 const dx = moveTarget.x - enemy.x;
                 const distToTarget = Math.abs(dx);
-                
+
                 // If pathfinding, move to waypoint. If reached end, use tactical distance.
                 const isPathing = enemy.path && enemy.currentPathIndex < enemy.path.length;
-                
+
                 if (isPathing) {
                     if (distToTarget > 10) {
                         enemy.setAccelerationX(dx > 0 ? accel : -accel);

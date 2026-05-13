@@ -33,6 +33,8 @@ router.post('/register', async (req, res) => {
                     id: user.id, 
                     username: user.username, 
                     avatarUrl: user.avatarUrl,
+                    totalKills: user.totalKills,
+                    highestWave: user.highestWave,
                     appearance: user.appearance,
                     selectedWeapons: user.selectedWeapons
                 } 
@@ -62,12 +64,14 @@ router.post('/login', async (req, res) => {
         const payload = { user: { id: user.id } };
         jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '7d' }, (err, token) => {
             if (err) throw err;
+            console.log(`[Login Success] User: ${user.username}, TotalKills: ${user.totalKills}, Wave: ${user.highestWave}`);
             res.json({ 
                 token, 
                 user: { 
                     id: user.id, 
                     username: user.username, 
                     avatarUrl: user.avatarUrl, 
+                    totalKills: user.totalKills,
                     highestWave: user.highestWave,
                     appearance: user.appearance,
                     selectedWeapons: user.selectedWeapons
@@ -75,7 +79,7 @@ router.post('/login', async (req, res) => {
             });
         });
     } catch (err) {
-        console.error(err.message);
+        console.error("[Login Error]", err.message);
         res.status(500).send('Server Error');
     }
 });

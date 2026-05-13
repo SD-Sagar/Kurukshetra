@@ -9,6 +9,8 @@ export default class MainMenu extends Phaser.Scene {
     create() {
         useGameStore.getState().setShowHUD(false);
         const { width, height } = this.cameras.main;
+        const store = useGameStore.getState();
+        const hasProgress = store.hasProgress;
 
         // Background
         this.add.rectangle(0, 0, width, height, 0x0f172a).setOrigin(0, 0);
@@ -21,7 +23,11 @@ export default class MainMenu extends Phaser.Scene {
 
         const options = [
             { text: 'NEW GAME', action: () => this.startNewGame() },
-            { text: 'CONTINUE SOLO', action: () => this.continueSolo() },
+            { 
+                text: 'CONTINUE SOLO', 
+                action: hasProgress ? () => this.continueSolo() : () => {}, 
+                color: hasProgress ? '#ffffff' : '#64748b' 
+            },
             { text: 'CO-OP (COMING SOON)', action: () => {}, color: '#64748b' },
             { text: 'EXIT', action: () => this.exitGame(), color: '#ef4444' }
         ];
@@ -34,8 +40,11 @@ export default class MainMenu extends Phaser.Scene {
                 padding: { x: 20, y: 10 }
             })
             .setOrigin(0.5)
-            .setInteractive({ useHandCursor: true })
-            .on('pointerover', () => btn.setStyle({ fill: '#fbbf24' }))
+            .setInteractive({ useHandCursor: hasProgress || opt.text !== 'CONTINUE SOLO' })
+            .on('pointerover', () => {
+                if (opt.text === 'CONTINUE SOLO' && !hasProgress) return;
+                btn.setStyle({ fill: '#fbbf24' });
+            })
             .on('pointerout', () => btn.setStyle({ fill: opt.color || '#ffffff' }))
             .on('pointerdown', opt.action);
         });

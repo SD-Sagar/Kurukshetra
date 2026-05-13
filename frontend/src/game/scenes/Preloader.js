@@ -79,6 +79,9 @@ export default class Preloader extends Phaser.Scene {
         // Map Assets
         this.load.tilemapTiledJSON('map', 'assets/maps/map.json');
         this.load.tilemapTiledJSON('recruitment_map', 'assets/maps/recruitment.json');
+        
+        // Cinematic Assets
+        this.load.video('breach_video', 'assets/videos/breach.mp4');
 
         // --- NEW CUSTOMIZATION ASSETS ---
         

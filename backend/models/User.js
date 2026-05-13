@@ -19,7 +19,7 @@ const UserSchema = new mongoose.Schema({
         type: Number,
         default: 0
     },
-    highScore: {
+    totalKills: {
         type: Number,
         default: 0
     },

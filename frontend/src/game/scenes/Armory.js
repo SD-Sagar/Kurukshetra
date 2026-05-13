@@ -36,6 +36,26 @@ export default class Armory extends Phaser.Scene {
         this.playerPreview.container.setPosition(200, height / 2 + 50);
         this.playerPreview.container.setScale(1);
 
+        // Slick Combat Record UI
+        const recordBox = this.add.container(50, height - 200);
+        const bg = this.add.rectangle(0, 0, 250, 120, 0x000000, 0.6).setOrigin(0);
+        const border = this.add.rectangle(0, 0, 250, 120).setOrigin(0).setStrokeStyle(2, 0x22d3ee, 0.8);
+        
+        const title = this.add.text(10, 10, 'COMBAT RECORD', { font: 'bold 16px monospace', fill: '#22d3ee' });
+        this.killsText = this.add.text(10, 45, `${store.totalKills} KILLS`, { font: 'bold 24px monospace', fill: '#ffffff' });
+        this.wavesText = this.add.text(10, 75, `WAVE ${store.highestWave} REACHED`, { font: '14px monospace', fill: '#94a3b8' });
+
+        recordBox.add([bg, border, title, this.killsText, this.wavesText]);
+
+        // Live Sync Data
+        if (!store.isGuest) {
+            store.fetchRecord().then(() => {
+                const updatedStore = useGameStore.getState();
+                if (this.killsText) this.killsText.setText(`${updatedStore.totalKills} KILLS`);
+                if (this.wavesText) this.wavesText.setText(`WAVE ${updatedStore.highestWave} REACHED`);
+            });
+        }
+
         // Tabs (activeTab set in init)
         const tabStyle = { font: 'bold 20px monospace', fill: '#ffffff', backgroundColor: '#334155', padding: { x: 20, y: 10 } };
         const activeTabStyle = { ...tabStyle, backgroundColor: '#fbbf24', fill: '#000000' };
