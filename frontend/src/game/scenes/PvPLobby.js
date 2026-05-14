@@ -81,7 +81,12 @@ export default class PvPLobby extends Phaser.Scene {
             this.readyBtn.setText('READY');
         };
 
-        this.onMatchStarted = () => this.scene.start('MainGame');
+        this.onMatchStarted = (data) => {
+            this.scene.start('MainGame', { 
+                gameMode: 'PVP',
+                lootMap: data ? data.lootMap : null 
+            });
+        };
 
         this.onPlayerJoined = (data) => {
             store.setPvPPlayers(data.players);

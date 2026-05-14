@@ -12,6 +12,11 @@ export default class MainGame extends Phaser.Scene {
         super('MainGame');
     }
 
+    init(data) {
+        this.startData = data || {};
+        this.gameMode = data?.gameMode || 'SOLO';
+    }
+
     create() {
         const store = useGameStore.getState();
         this.gameMode = store.gameMode;
@@ -25,6 +30,7 @@ export default class MainGame extends Phaser.Scene {
             // PvP specific init
             this.networkPlayers = new Map();
             this.networkHitboxes = this.physics.add.group();
+            this.remoteBullets = this.physics.add.group();
             this.setupPvPSocket();
             this.setupPvPUI();
         }
@@ -140,7 +146,17 @@ export default class MainGame extends Phaser.Scene {
                 } else if (obj.name === 'loot_drop') {
                     const point = { x: obj.x, y: obj.y, active: false, index: this.lootPoints.length };
                     this.lootPoints.push(point);
-                    this.spawnNewLootAtPoint(point);
+                    
+                    if (this.gameMode === 'SOLO') {
+                        this.spawnNewLootAtPoint(point);
+                    } else if (this.gameMode === 'PVP' && this.startData.lootMap) {
+                        // Use the server-provided loot map
+                        const key = this.startData.lootMap[point.index];
+                        if (key) {
+                            this.spawnWeaponPickup(point.x, point.y, key, null, true, point.index);
+                            point.active = true;
+                        }
+                    }
                 }
             });
         }
@@ -183,6 +199,7 @@ export default class MainGame extends Phaser.Scene {
         // PVP Overlaps (Prioritize hitting players over walls)
         if (this.gameMode === 'PVP') {
             this.physics.add.overlap(this.player.weapons.bullets, this.networkHitboxes, this.bulletHitRemotePlayer, null, this);
+            this.physics.add.overlap(this.remoteBullets, this.player.sprite, this.remoteBulletHitLocalPlayer, null, this);
         }
 
         this.physics.add.collider(this.player.weapons.bullets, [this.platforms, this.physicsDetails], (b) => {
@@ -293,6 +310,12 @@ export default class MainGame extends Phaser.Scene {
         socketManager.on('remote_player_update', this.onRemoteUpdate);
         socketManager.on('player_joined', this.onPlayerJoined);
         socketManager.on('player_fire', this.onPlayerFire);
+        socketManager.on('player_offline', this.onPlayerOffline);
+        socketManager.on('kill_announcement', this.onKillAnnouncement);
+        socketManager.on('timer_tick', this.onTimerTick);
+        socketManager.on('match_ended', this.onMatchEnded);
+        socketManager.on('loot_sync', this.onLootSync);
+
         this.onPlayerHit = (data) => {
             if (this.player) {
                 this.player.lastAttackerId = data.attackerId;
@@ -300,18 +323,26 @@ export default class MainGame extends Phaser.Scene {
                 this.cameras.main.shake(100, 0.01);
             }
         };
-
         socketManager.on('player_hit', this.onPlayerHit);
-        socketManager.on('player_offline', this.onPlayerOffline);
-        socketManager.on('kill_announcement', this.onKillAnnouncement);
-        socketManager.on('timer_tick', this.onTimerTick);
-        socketManager.on('match_ended', this.onMatchEnded);
+
+        this.onLootPickedUp = (data) => {
+            const point = this.lootPoints[data.index];
+            if (point) {
+                point.active = false;
+                this.weaponPickups.getChildren().forEach(p => {
+                    if (p.pointIndex === data.index) p.destroy();
+                });
+            }
+        };
+        socketManager.on('loot_picked_up', this.onLootPickedUp);
 
         this.events.once('shutdown', () => {
             socketManager.off('remote_player_update', this.onRemoteUpdate);
             socketManager.off('player_joined', this.onPlayerJoined);
             socketManager.off('player_fire', this.onPlayerFire);
             socketManager.off('player_hit', this.onPlayerHit);
+            socketManager.off('loot_picked_up', this.onLootPickedUp);
+            socketManager.off('loot_sync', this.onLootSync);
             socketManager.off('player_offline', this.onPlayerOffline);
             socketManager.off('kill_announcement', this.onKillAnnouncement);
             socketManager.off('timer_tick', this.onTimerTick);
@@ -472,8 +503,10 @@ export default class MainGame extends Phaser.Scene {
             this.player.weapons.addWeapon('dagger');
 
             // Teleport Sarge
-            this.sarge.sprite.setPosition(spawn.x - 50, spawn.y);
-            this.sarge.say("This is not the way recruit", 4000);
+            if (this.sarge) {
+                this.sarge.sprite.setPosition(spawn.x - 50, spawn.y);
+                this.sarge.say("This is not the way recruit", 4000);
+            }
 
             this.cameras.main.fadeIn(500, 0, 0, 0);
         });
@@ -548,7 +581,12 @@ export default class MainGame extends Phaser.Scene {
     handleLootPickup(pointIndex) {
         if (pointIndex === -1) return;
         const point = this.lootPoints[pointIndex];
+        if (!point || !point.active) return;
         point.active = false;
+
+        if (this.gameMode === 'PVP') {
+            socketManager.sendLootPickup(pointIndex);
+        }
 
         // 15 Second Respawn Timer
         this.time.delayedCall(15000, () => {
@@ -820,15 +858,21 @@ export default class MainGame extends Phaser.Scene {
             this.player.update(time, delta, this.input.activePointer);
             
             // Sync to server if PvP
-            if (this.gameMode === 'PVP' && time % 50 < delta) { // ~20fps sync
+            if (this.gameMode === 'PVP') {
+                // Update remote players visuals (interpolation)
+                this.networkPlayers.forEach(player => player.update(time, delta));
+
+                if (time % 50 < delta) { // ~20fps sync
                 socketManager.sendUpdate({
                     x: this.player.sprite.x,
                     y: this.player.sprite.y,
                     flipX: this.player.visual.container.scaleX < 0,
                     aimAngle: this.player.visual.aimAngle || 0,
-                    currentAnim: Math.abs(this.player.sprite.body.velocity.x) > 10 ? 'walk' : 'idle',
+                    currentAnim: this.player.currentAnim || (Math.abs(this.player.sprite.body.velocity.x) > 10 ? 'walk' : 'idle'),
                     weapon: this.player.weapons.inventory[this.player.weapons.currentSlot],
-                    isShooting: this.player.isShooting
+                    isShooting: this.player.isShooting,
+                    isJetpacking: this.player.isJetpacking,
+                    isJumping: !this.player.sprite.body.blocked.down && !this.player.isJetpacking
                 });
             }
         }
@@ -965,6 +1009,7 @@ export default class MainGame extends Phaser.Scene {
 
         cam.scrollX += (targetX - (cam.scrollX + cam.width / 2)) * 0.15;
         cam.scrollY += (targetY - (cam.scrollY + cam.height / 2)) * 0.15;
+        }
     }
 
     // --- PvP Synchronization & UI ---
@@ -975,14 +1020,28 @@ export default class MainGame extends Phaser.Scene {
             if (!remotePlayer) {
                 const pData = useGameStore.getState().pvpPlayers.find(p => p.id === data.id);
                 if (pData) {
-                    remotePlayer = new NetworkPlayer(this, data.id, pData.name, pData.avatar);
+                    remotePlayer = new NetworkPlayer(this, data.id, pData.name, pData.avatar, data.transform.x, data.transform.y);
                     this.networkPlayers.set(data.id, remotePlayer);
                     this.networkHitboxes.add(remotePlayer.hitbox);
                 }
             }
-            if (remotePlayer) remotePlayer.updateTransform(data.transform);
+            if (remotePlayer) {
+                remotePlayer.updateTransform(data.transform);
+                remotePlayer.lerpSpeed = 0.35;
+            }
         };
 
+        this.onLootSync = (lootMap) => {
+            this.lootPoints.forEach((point, i) => {
+                const key = lootMap[i];
+                if (key) {
+                    this.spawnWeaponPickup(point.x, point.y, key, null, true, point.index);
+                    point.active = true;
+                }
+            });
+        };
+
+        socketManager.on('remote_player_update', this.onRemoteUpdate);
         this.onPlayerJoined = (data) => {
             this.syncNetworkPlayers(data.players);
         };
@@ -1110,5 +1169,120 @@ export default class MainGame extends Phaser.Scene {
         // If I was the victim, I've already handled my death locally
     }
 
+    onPlayerDeath() {
+        if (this.player.isRespawning) return;
+        this.player.isRespawning = true;
+
+        if (this.gameMode === 'PVP') {
+            // Tell server I died and who killed me
+            socketManager.sendDeath(this.player.lastAttackerId);
+            
+            this.time.delayedCall(1000, () => this.cameras.main.fadeOut(500, 0, 0, 0));
+            this.time.delayedCall(2000, () => {
+                this.respawnPlayerPvP();
+                this.cameras.main.fadeIn(500, 0, 0, 0);
+            });
+            return;
+        }
+
+        // Drop current weapon (if not pistol)
+        const currentWeapon = this.player.weapons.inventory[this.player.weapons.currentSlot];
+        if (currentWeapon && currentWeapon !== 'pistol' && currentWeapon !== 'dagger') {
+            this.spawnWeaponPickup(this.player.sprite.x, this.player.sprite.y, currentWeapon);
+        }
+
+        // Visual death effect (briefly see pieces before fade)
+        this.time.delayedCall(1300, () => this.cameras.main.fadeOut(500, 0, 0, 0));
+
+        this.time.delayedCall(2300, () => {
+            // Find a Safe Respawn Point (No enemies within 400px)
+            const safeSpawns = this.playerSpawns.filter(s => {
+                let tooClose = false;
+                this.enemies.getChildren().forEach(e => {
+                    if (e.active && Phaser.Math.Distance.Between(s.x, s.y, e.x, e.y) < 400) tooClose = true;
+                });
+                return !tooClose;
+            });
+
+            // Fallback to first spawn if all are "hot"
+            const spawn = safeSpawns.length > 0
+                ? safeSpawns[Phaser.Math.Between(0, safeSpawns.length - 1)]
+                : this.playerSpawns[0];
+
+            this.player.sprite.setPosition(spawn.x, spawn.y);
+            this.player.health = 100;
+            this.player.fuel = 100;
+            this.player.isRespawning = false;
+            this.player.sprite.setActive(true);
+            this.player.sprite.body.setEnable(true);
+            this.player.sprite.body.reset(spawn.x, spawn.y);
+            this.player.visual.reset();
+
+            // Reset Loadout on Respawn
+            this.player.weapons.resetInventory();
+            this.player.weapons.addWeapon('pistol');
+            this.player.weapons.addWeapon('dagger');
+
+            // Teleport Sarge
+            if (this.sarge) {
+                this.sarge.sprite.setPosition(spawn.x - 50, spawn.y);
+                this.sarge.say("This is not the way recruit", 4000);
+            }
+
+            this.cameras.main.fadeIn(500, 0, 0, 0);
+        });
+    }
+
+    respawnPlayerPvP() {
+        if (!this.player || !this.player.sprite) return;
+        const spawn = this.playerSpawns[Math.floor(Math.random() * this.playerSpawns.length)];
+        this.player.health = 100;
+        this.player.isRespawning = false;
+        this.player.sprite.setPosition(spawn.x, spawn.y);
+        this.player.sprite.setActive(true).setVisible(false); // KEEP INVISIBLE
+        this.player.visual.reset();
+        this.player.syncUI();
+    }
+
+    bulletHitRemotePlayer(bullet, hitbox) {
+        if (!bullet.active || !hitbox.active) return;
+        const victim = hitbox.owner;
+        if (!victim) return;
+
+        // Visual Hit Feedback locally
+        const particles = this.add.particles(bullet.x, bullet.y, 'explosion_part', {
+            speed: { min: 50, max: 150 },
+            lifespan: 200,
+            scale: { start: 0.5, end: 0 },
+            quantity: 5,
+            tint: 0xff0000
+        });
+        this.time.delayedCall(200, () => particles.destroy());
+
+        // Send HIT event with damage
+        const damage = bullet.damage || 20;
+        socketManager.sendHit(victim.id, damage);
+        
+        if (bullet.isRocket) bullet.onImpact(); else bullet.destroy();
+    }
+
+    remoteBulletHitLocalPlayer(playerSprite, bullet) {
+        if (!bullet.active || this.player.isRespawning) return;
+        
+        const damage = bullet.damage || 20;
+        this.player.takeDamage(damage);
+        
+        const particles = this.add.particles(bullet.x, bullet.y, 'explosion_part', {
+            speed: { min: 50, max: 150 },
+            lifespan: 200,
+            scale: { start: 0.5, end: 0 },
+            quantity: 5,
+            tint: 0xffffff
+        });
+        this.time.delayedCall(200, () => particles.destroy());
+        this.cameras.main.shake(100, 0.01);
+
+        if (bullet.isRocket) bullet.onImpact(); else bullet.destroy();
+    }
 }
 

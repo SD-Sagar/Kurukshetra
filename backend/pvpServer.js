@@ -119,12 +119,14 @@ module.exports = (io) => {
 
         socket.on('player_update', ({ roomCode, transform }) => {
             const room = rooms.get(roomCode);
+        socket.on('player_update', (data) => {
+            const room = rooms.get(data.roomCode);
             if (!room || room.state !== 'IN_GAME') return;
 
-            // Broadcast movement/animation to others
-            socket.to(roomCode).emit('remote_player_update', {
+            // Relay position/state to everyone else in the room
+            socket.to(data.roomCode).emit('remote_player_update', {
                 id: socket.id,
-                transform
+                transform: data
             });
         });
 
@@ -147,7 +149,7 @@ module.exports = (io) => {
             io.to(victimId).emit('player_hit', { damage, attackerId: socket.id });
         });
 
-        socket.on('player_death', ({ roomCode }) => {
+        socket.on('player_death', ({ roomCode, killerId }) => {
             const room = rooms.get(roomCode);
             if (!room || room.state !== 'IN_GAME') return;
 
@@ -156,13 +158,37 @@ module.exports = (io) => {
 
             victim.deaths++;
             
-            // Broadcast death so others can show animation
+            // Credit the killer if known
+            let killerName = 'An Opponent';
+            const killer = room.players.get(killerId);
+            if (killer) {
+                killer.kills++;
+                killerName = killer.name;
+            }
+
+            // Broadcast death
             io.to(roomCode).emit('kill_announcement', {
                 victimId: socket.id,
                 victimName: victim.name,
-                killerId: 'unknown', // We don't track the exact final hit killer yet for simplicity
-                killerName: 'An Opponent'
+                killerId: killerId || 'unknown',
+                killerName: killerName
             });
+        });
+
+        socket.on('player_loot_pickup', ({ roomCode, index }) => {
+            const room = rooms.get(roomCode);
+            if (!room || room.state !== 'IN_GAME') return;
+
+            // Notify everyone ELSE that this item is gone
+            socket.to(roomCode).emit('loot_picked_up', { index });
+        });
+
+        socket.on('player_loot_sync', ({ roomCode, lootMap }) => {
+            const room = rooms.get(roomCode);
+            if (!room) return;
+            
+            // Broadcast the global map to all clients in the room
+            io.to(roomCode).emit('loot_sync', lootMap);
         });
 
         // --- Lifecycle ---
@@ -227,7 +253,12 @@ module.exports = (io) => {
         if (!room) return;
 
         room.state = 'IN_GAME';
-        io.to(roomCode).emit('match_started');
+
+        // Generate a random loot map for the entire match
+        const weaponKeys = ['smg', 'rifle', 'sniper', 'shotgun', 'launcher', 'machinegun', 'tacticalshotgun', 'medkit', 'grenade'];
+        room.lootMap = Array.from({ length: 60 }, () => weaponKeys[Math.floor(Math.random() * weaponKeys.length)]);
+
+        io.to(roomCode).emit('match_started', { lootMap: room.lootMap });
 
         room.gameInterval = setInterval(() => {
             room.remainingTime--;

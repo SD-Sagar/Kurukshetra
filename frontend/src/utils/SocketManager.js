@@ -37,7 +37,7 @@ class SocketManager {
             'ready_status_updated', 'countdown_tick', 'countdown_cancelled',
             'match_started', 'timer_tick', 'match_ended', 'kill_announcement',
             'remote_player_update', 'new_admin', 'match_in_progress', 'match_timer_updated',
-            'player_fire', 'player_hit'
+            'player_fire', 'player_hit', 'loot_picked_up', 'loot_sync'
         ];
 
         events.forEach(event => {
@@ -112,6 +112,18 @@ class SocketManager {
     sendFire(angle, weapon) {
         if (this.roomCode) {
             this.socket.emit('player_fire', { roomCode: this.roomCode, angle, weapon });
+        }
+    }
+
+    sendLootPickup(index) {
+        if (this.roomCode) {
+            this.socket.emit('player_loot_pickup', { roomCode: this.roomCode, index });
+        }
+    }
+
+    sendLootSync(lootMap) {
+        if (this.roomCode) {
+            this.socket.emit('player_loot_sync', { roomCode: this.roomCode, lootMap });
         }
     }
 
