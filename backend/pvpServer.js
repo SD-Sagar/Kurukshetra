@@ -119,14 +119,12 @@ module.exports = (io) => {
 
         socket.on('player_update', ({ roomCode, transform }) => {
             const room = rooms.get(roomCode);
-        socket.on('player_update', (data) => {
-            const room = rooms.get(data.roomCode);
             if (!room || room.state !== 'IN_GAME') return;
 
             // Relay position/state to everyone else in the room
-            socket.to(data.roomCode).emit('remote_player_update', {
+            socket.to(roomCode).emit('remote_player_update', {
                 id: socket.id,
-                transform: data
+                transform
             });
         });
 
