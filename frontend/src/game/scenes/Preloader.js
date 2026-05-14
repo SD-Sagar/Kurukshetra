@@ -126,6 +126,7 @@ export default class Preloader extends Phaser.Scene {
         this.load.audio('rocket-launcher_sound', 'assets/sounds/rocket-launcher_sound.mp3');
         this.load.audio('shotgun_sound', 'assets/sounds/shotgun_sound.mp3');
         this.load.audio('sniper_sound', 'assets/sounds/sniper_sound.mp3');
+        this.load.audio('reload_sound', 'assets/sounds/reload_sound.mp3');
 
         this.load.on('loaderror', (fileObj) => {
             console.error(`Failed to load asset: ${fileObj.key} from ${fileObj.url}`);

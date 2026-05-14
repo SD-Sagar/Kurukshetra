@@ -159,6 +159,8 @@ export default class MainGame extends Phaser.Scene {
         });
         this.physics.add.collider(this.player.weapons.grenadeGroup, [this.platforms, this.physicsDetails]);
         this.physics.add.collider(this.player.weapons.grenadeGroup, this.enemies);
+        this.physics.add.collider(this.player.weapons.grenadeGroup, this.player.sprite);
+        this.physics.add.collider(this.player.weapons.grenadeGroup, this.sarge.sprite);
 
         this.physics.add.overlap(this.player.weapons.bullets, this.enemies, this.bulletHitEnemy, null, this);
         this.physics.add.overlap(this.sarge.weapons.bullets, this.enemies, this.bulletHitEnemy, null, this);
@@ -559,8 +561,12 @@ export default class MainGame extends Phaser.Scene {
 
         if (enemy.health <= 0 && !enemy.isDying) {
             enemy.isDying = true;
-            this.kills++;
-            useGameStore.getState().updateStats(1, this.wave);
+            
+            // Only count kills caused by the player
+            if (bullet.owner === this.player.sprite) {
+                this.kills++;
+                useGameStore.getState().updateStats(1, this.wave);
+            }
 
             const particles = this.add.particles(enemy.x, enemy.y, 'explosion_part', {
                 speed: { min: 100, max: 300 },

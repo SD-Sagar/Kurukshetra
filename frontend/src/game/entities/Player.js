@@ -103,8 +103,11 @@ export default class Player {
     }
 
     handleMovement(delta) {
-        const accel = 1000; 
-        const drag = 600;
+        const isOnGround = this.sprite.body.touching.down || this.sprite.body.blocked.down;
+        
+        // DYNAMIC PHYSICS: More drag on ground for stopping, less in air for drifting
+        const accel = isOnGround ? 1000 : 1200; 
+        const drag = isOnGround ? 800 : 200; 
         const maxSpeed = 500;
 
         this.sprite.body.setMaxVelocity(maxSpeed, 1000);
@@ -126,13 +129,12 @@ export default class Player {
             this.sprite.setAccelerationY(-2000);
             this.fuel = Math.max(0, this.fuel - (delta * 0.0066));
             
-            // Particles
-            this.jetpackParticles.emitParticleAt(this.sprite.x, this.sprite.y + 40);
+            // Particles - LOWERED POSITION (y + 55)
+            this.jetpackParticles.emitParticleAt(this.sprite.x, this.sprite.y + 55);
         } else {
             this.sprite.setAccelerationY(0);
             
             // Recharge fuel
-            const isOnGround = this.sprite.body.touching.down || this.sprite.body.blocked.down;
             if (isOnGround) {
                 this.fuel = Math.min(this.maxFuel, this.fuel + (delta * 0.02));
             } else {

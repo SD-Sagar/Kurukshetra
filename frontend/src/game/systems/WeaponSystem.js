@@ -15,16 +15,16 @@ export default class WeaponSystem {
 
         // Tactical Archetypes
         this.weaponData = {
-            pistol: { name: 'Pistol', damage: 15, range: 2000, muzzleSpeed: 1000, fireRate: 400, magSize: 12, reloadTime: 1500, color: 0xffffff, key: 'pistol', sound: 'pistol_sound' },
-            smg: { name: 'SMG', damage: 8, range: 4000, muzzleSpeed: 1200, fireRate: 80, magSize: 30, reloadTime: 1500, spread: 0.08, color: 0x00ffff, key: 'smg', sound: 'pistol_sound' },
-            rifle: { name: 'Rifle', damage: 20, range: 8000, muzzleSpeed: 1300, fireRate: 110, magSize: 20, reloadTime: 2000, spread: 0.08, color: 0x00ff00, key: 'rifle', sound: 'rifle_sound' },
+            pistol: { name: 'Pistol', damage: 15, range: 1100, muzzleSpeed: 1000, fireRate: 400, magSize: 12, reloadTime: 1500, color: 0xffffff, key: 'pistol', sound: 'pistol_sound' },
+            smg: { name: 'SMG', damage: 8, range: 1400, muzzleSpeed: 1200, fireRate: 80, magSize: 30, reloadTime: 1500, spread: 0.08, color: 0x00ffff, key: 'smg', sound: 'pistol_sound' },
+            rifle: { name: 'Rifle', damage: 20, range: 1600, muzzleSpeed: 1300, fireRate: 110, magSize: 20, reloadTime: 2000, spread: 0.08, color: 0x00ff00, key: 'rifle', sound: 'rifle_sound' },
             sniper: { name: 'Sniper', damage: 85, range: 16000, muzzleSpeed: 2500, fireRate: 1500, magSize: 5, reloadTime: 3500, isTracer: true, color: 0xff00ff, key: 'sniper', sound: 'sniper_sound' },
-            shotgun: { name: 'Shotgun', damage: 10, range: 800, muzzleSpeed: 900, fireRate: 800, magSize: 6, reloadTime: 2000, pellets: 8, fanAngle: 30, spread: 0.3, color: 0xffff00, key: 'shotgun', sound: 'shotgun_sound' },
+            shotgun: { name: 'Shotgun', damage: 10, range: 800, muzzleSpeed: 900, fireRate: 800, magSize: 6, reloadTime: 2000, pellets: 8, fanAngle: 15, spread: 0.3, color: 0xffff00, key: 'shotgun', sound: 'shotgun_sound' },
             launcher: { name: 'Launcher', damage: 100, range: 16000, muzzleSpeed: 600, fireRate: 2000, magSize: 3, reloadTime: 2500, isRocket: true, color: 0xff4500, key: 'launcher', sound: 'rocket-launcher_sound' },
             sarge_smg: { name: 'Sarge SMG', damage: 15, range: 6000, muzzleSpeed: 1200, fireRate: 110, magSize: 50, reloadTime: 2000, spread: 0.05, color: 0xffd700, key: 'sarge_smg', sound: 'rifle_sound' },
             dagger: { name: 'Dagger', damage: 35, range: 70, muzzleSpeed: 0, fireRate: 400, magSize: 999, reloadTime: 0, isMelee: true, color: 0xcccccc, key: 'dagger', sound: 'dagger_sound' },
-            machinegun: { name: 'Machine Gun', damage: 20, range: 8000, muzzleSpeed: 1300, fireRate: 80, magSize: 100, reloadTime: 2500, spread: 0.12, color: 0x00ff88, key: 'machinegun', sound: 'rifle_sound' },
-            tacticalshotgun: { name: 'Tactical Shotgun', damage: 8, range: 1000, muzzleSpeed: 1000, fireRate: 400, magSize: 10, reloadTime: 1500, pellets: 6, fanAngle: 25, spread: 0.2, color: 0xff8800, key: 'tacticalshotgun', sound: 'shotgun_sound' }
+            machinegun: { name: 'Machine Gun', damage: 20, range: 1600, muzzleSpeed: 1300, fireRate: 80, magSize: 100, reloadTime: 2500, spread: 0.12, color: 0x00ff88, key: 'machinegun', sound: 'rifle_sound' },
+            tacticalshotgun: { name: 'Tactical Shotgun', damage: 8, range: 1000, muzzleSpeed: 1000, fireRate: 400, magSize: 10, reloadTime: 1500, pellets: 6, fanAngle: 15, spread: 0.2, color: 0xff8800, key: 'tacticalshotgun', sound: 'shotgun_sound' }
         };
 
         this.inventory = [null, null]; 
@@ -146,8 +146,15 @@ export default class WeaponSystem {
         });
         this.scene.time.delayedCall(600, () => particles.destroy());
 
-        // Play Explosion Sound
-        this.scene.sound.play('missile-blast_sound', { volume: 0.8 });
+        // Play Explosion Sound with Proximity Check
+        if (this.scene.player && this.scene.player.sprite) {
+            const dist = Phaser.Math.Distance.Between(x, y, this.scene.player.sprite.x, this.scene.player.sprite.y);
+            if (dist < 1700) {
+                const falloff = 1 - (dist / 1700);
+                const volume = Math.max(0.1, 0.8 * falloff);
+                this.scene.sound.play('missile-blast_sound', { volume });
+            }
+        }
 
         // Splash Damage Targets Check
         const targets = [];
@@ -176,7 +183,7 @@ export default class WeaponSystem {
                     t.health = (t.health || 50) - dmg;
                     if (t.health <= 0) {
                         // Correctly trigger enemy death via the scene logic
-                        this.scene.bulletHitEnemy({ active: true, isRocket: false, damage: 0, destroy: () => {} }, t);
+                        this.scene.bulletHitEnemy({ active: true, isRocket: false, damage: 0, owner: owner, destroy: () => {} }, t);
                     }
                 };
             }
@@ -187,8 +194,8 @@ export default class WeaponSystem {
             const effectiveRadius = radius || 200; // Increased default radius
 
             if (dist < effectiveRadius) {
-                // FLATTENED FALLOFF: 100% damage in the inner 50%, then falloff to 0
-                const innerRadius = effectiveRadius * 0.5;
+                // FLATTENED FALLOFF: 100% damage in the inner 60% (90px for 150px blast), then falloff to 0
+                const innerRadius = effectiveRadius * 0.6;
                 let finalDamage = damage;
 
                 if (dist > innerRadius) {
@@ -255,32 +262,41 @@ export default class WeaponSystem {
                 };
             }
 
-            // SNIPER TRACER EFFECT (With Wall Detection)
+            // SNIPER TRACER EFFECT (With Wall Detection & Instant Damage)
             if (weapon.isTracer) {
                 bullet.setVisible(false);
                 const line = this.scene.add.graphics();
                 line.lineStyle(2, 0xffffff, 0.8);
                 
-                // Manual Raycast to find wall hit
                 let endX = this.owner.x + Math.cos(angle) * weapon.range;
                 let endY = this.owner.y + Math.sin(angle) * weapon.range;
                 
-                if (this.scene.platforms || this.scene.enemies) {
-                    const step = 20;
-                    for (let d = 0; d < weapon.range; d += step) {
-                        const px = this.owner.x + Math.cos(angle) * d;
-                        const py = this.owner.y + Math.sin(angle) * d;
+                const step = 10; // High precision
+                for (let d = 0; d < weapon.range; d += step) {
+                    const px = this.owner.x + Math.cos(angle) * d;
+                    const py = this.owner.y + Math.sin(angle) * d;
+                    
+                    const hitWall = this.scene.platforms?.getTileAtWorldXY(px, py);
+                    const hitEnemy = this.scene.enemies?.getChildren().find(e => e.active && !e.isDying && e.getBounds().contains(px, py));
+                    const hitPlayer = this.scene.player?.sprite.active && this.scene.player.sprite.getBounds().contains(px, py);
+                    const hitSarge = this.scene.sarge?.sprite.active && this.scene.sarge.sprite.getBounds().contains(px, py);
+
+                    if (hitWall || hitEnemy || (hitPlayer && this.owner !== this.scene.player.sprite) || (hitSarge && this.owner !== this.scene.sarge.sprite)) {
+                        endX = px;
+                        endY = py;
                         
-                        // Check Walls
-                        const hitWall = this.scene.platforms?.getTileAtWorldXY(px, py);
-                        // Check Enemies
-                        const hitEnemy = this.scene.enemies?.getChildren().find(e => e.getBounds().contains(px, py));
-                        
-                        if (hitWall || hitEnemy) {
-                            endX = px;
-                            endY = py;
-                            break;
+                        // APPLY INSTANT DAMAGE
+                        if (hitEnemy) {
+                            this.scene.bulletHitEnemy(bullet, hitEnemy);
+                        } else if (hitPlayer && this.owner !== this.scene.player.sprite) {
+                            this.scene.enemyBulletHitPlayer(this.scene.player.sprite, bullet);
+                        } else if (hitSarge && this.owner !== this.scene.sarge.sprite) {
+                            // Sarge takes damage like player for consistency
+                            this.scene.enemyBulletHitPlayer(this.scene.sarge.sprite, bullet);
                         }
+                        
+                        bullet.destroy(); // Destroy immediately after instant hit
+                        break;
                     }
                 }
                 
@@ -291,8 +307,6 @@ export default class WeaponSystem {
                     duration: 150,
                     onComplete: () => line.destroy()
                 });
-                
-                this.scene.physics.moveTo(bullet, endX, endY, weapon.muzzleSpeed);
             } else {
                 this.scene.physics.moveTo(bullet, targetX, targetY, weapon.muzzleSpeed);
             }
@@ -315,8 +329,9 @@ export default class WeaponSystem {
         if (this.grenades <= 0) return;
         this.grenades--;
 
-        const spawnX = this.owner.x;
-        const spawnY = this.owner.y;
+        const throwAngle = Phaser.Math.Angle.Between(this.owner.x, this.owner.y, targetX, targetY);
+        const spawnX = this.owner.x + Math.cos(throwAngle) * 45;
+        const spawnY = this.owner.y + Math.sin(throwAngle) * 45;
 
         const grenade = this.grenadeGroup.get(spawnX, spawnY, 'grenade');
         if (grenade) {
@@ -343,11 +358,20 @@ export default class WeaponSystem {
                 grenade.body.setVelocity(vx, vy);
             }
 
-            // Fuse
-            this.scene.time.delayedCall(3000, () => {
+            // Fuse (Reduced to 2.5s)
+            this.scene.time.delayedCall(2500, () => {
                 if (grenade.active) {
                     this.createExplosion(grenade.x, grenade.y, 150, 100, this.owner);
-                    this.scene.sound.play('granade_sound', { volume: 0.8 });
+                    
+                    // Proximity Sound for Grenade specifically (optional if already handled by createExplosion)
+                    if (this.scene.player && this.scene.player.sprite) {
+                        const dist = Phaser.Math.Distance.Between(grenade.x, grenade.y, this.scene.player.sprite.x, this.scene.player.sprite.y);
+                        if (dist < 1700) {
+                            const falloff = 1 - (dist / 1700);
+                            const volume = Math.max(0.1, 0.8 * falloff);
+                            this.scene.sound.play('granade_sound', { volume });
+                        }
+                    }
                     grenade.destroy();
                 }
             });
@@ -360,6 +384,7 @@ export default class WeaponSystem {
         if (!wp || this.isReloading || slotAmmo.reserve <= 0 || slotAmmo.loaded === wp.magSize) return;
 
         this.isReloading = true;
+        this.scene.sound.play('reload_sound', { volume: 0.7 });
         
         this.scene.time.delayedCall(wp.reloadTime, () => {
             const needed = wp.magSize - slotAmmo.loaded;

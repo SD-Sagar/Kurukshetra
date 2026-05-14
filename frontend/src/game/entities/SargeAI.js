@@ -87,7 +87,11 @@ export default class SargeAI {
         const playerSprite = this.player.sprite;
         const distToPlayer = Phaser.Math.Distance.Between(this.sprite.x, this.sprite.y, playerSprite.x, playerSprite.y);
 
-        // 1. Visual Sync
+        // 1. Visual Sync & Physics
+        const isOnGround = this.sprite.body.touching.down || this.sprite.body.blocked.down;
+        const drag = isOnGround ? 800 : 200;
+        this.sprite.body.setDragX(drag);
+
         const currentWpKey = this.weapons.inventory[this.weapons.currentSlot];
         this.visual.container.setPosition(this.sprite.x, this.sprite.y + 10);
         this.visual.update(time, delta, this.sprite.body.velocity.x, false, currentWpKey);
@@ -180,7 +184,7 @@ export default class SargeAI {
         if (this.isEvading && !lockJetpack) {
             this.sprite.setAccelerationX(accel * 2.5 * this.evadeDir);
             this.sprite.setAccelerationY(-2400); 
-            if (time % 100 < 40) this.jetpackParticles.emitParticleAt(this.sprite.x, this.sprite.y + 40);
+            if (time % 100 < 40) this.jetpackParticles.emitParticleAt(this.sprite.x, this.sprite.y + 55);
         } else {
             // Horizontal Follow Waypoint
             const dx = moveTarget.x - this.sprite.x;
@@ -204,7 +208,7 @@ export default class SargeAI {
 
             if (thrustPower > 0) {
                 this.sprite.setAccelerationY(-thrustPower);
-                if (time % 100 < 30) this.jetpackParticles.emitParticleAt(this.sprite.x, this.sprite.y + 40);
+                if (time % 100 < 30) this.jetpackParticles.emitParticleAt(this.sprite.x, this.sprite.y + 55);
             } else {
                 this.sprite.setAccelerationY(0);
             }
