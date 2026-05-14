@@ -2,10 +2,20 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const dotenv = require('dotenv');
+const http = require('http');
+const { Server } = require('socket.io');
 
 dotenv.config();
 
 const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+    cors: {
+        origin: "*",
+        methods: ["GET", "POST"]
+    }
+});
+
 const PORT = process.env.PORT || 5000;
 
 // Middleware
@@ -27,6 +37,10 @@ app.get('/', (req, res) => {
     res.send('SD-Combat Backend is running');
 });
 
-app.listen(PORT, () => {
+// Socket.io Handlers
+require('./pvpServer')(io);
+
+server.listen(PORT, () => {
     console.log(`Server listening on port ${PORT}`);
 });
+

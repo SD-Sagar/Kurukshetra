@@ -9,6 +9,21 @@ export const useGameStore = create((set) => ({
     isMobile: false,
     isGuest: false,
     grenades: 3,
+    
+    // Multiplayer State
+    gameMode: 'SOLO', // 'SOLO' or 'PVP'
+    roomCode: null,
+    isHost: false,
+    hostId: null,
+    pvpPlayers: [],
+    matchTimer: 300,
+    
+    setGameMode: (mode) => set({ gameMode: mode }),
+    setRoomCode: (code) => set({ roomCode: code }),
+    setIsHost: (val) => set({ isHost: val }),
+    setHostId: (id) => set({ hostId: id }),
+    setPvPPlayers: (players) => set({ pvpPlayers: players }),
+    setMatchTimer: (seconds) => set({ matchTimer: seconds }),
 
     // Character Customization
     appearance: {

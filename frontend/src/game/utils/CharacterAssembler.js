@@ -15,9 +15,9 @@ export default class CharacterAssembler {
 
         // Dynamic Appearance Mapping
         const store = useGameStore.getState();
-        const app = this.type === 'player' ? store.appearance : {
+        const app = config.appearance || (this.type === 'player' ? store.appearance : {
             head: prefix, torso: prefix, arms: prefix, legs: prefix
-        };
+        });
 
         // Configuration based on type
         const isGoldenRatio = this.type === 'player' || this.type === 'sarge';
@@ -80,6 +80,7 @@ export default class CharacterAssembler {
         ]);
 
         this.walkCycle = 0;
+        this.aimAngle = 0;
         this.currentWeaponColor = null;
         this.meleeOffset = 0;
         
@@ -88,8 +89,9 @@ export default class CharacterAssembler {
         this.container.add(this.slashGraphics);
     }
 
-    setExpression(type) {
-        const app = this.type === 'player' ? useGameStore.getState().appearance : { head: this.type === 'sarge' ? 'sarge' : 'enemy' };
+    setExpression(type, customApp = null) {
+        const store = useGameStore.getState();
+        const app = customApp || (this.type === 'player' ? store.appearance : { head: this.type === 'sarge' ? 'sarge' : 'enemy' });
         
         if (type === 'shock') {
             this.head.setTexture(`headShock-${app.head}`);
@@ -100,12 +102,12 @@ export default class CharacterAssembler {
         }
     }
 
-    update(time, delta, velocityX, isCrouching = false, weaponColor = null, grenades = 0) {
+    update(time, delta, velocityX, isCrouching = false, weaponColor = null, grenades = 0, customApp = null) {
         const store = useGameStore.getState();
-        const app = this.type === 'player' ? store.appearance : {
+        const app = customApp || (this.type === 'player' ? store.appearance : {
             head: this.type === 'sarge' ? 'sarge' : 'enemy',
             legs: this.type === 'sarge' ? 'sarge' : 'enemy'
-        };
+        });
         
         this.currentWeaponColor = weaponColor;
         
@@ -187,7 +189,8 @@ export default class CharacterAssembler {
         }
 
         // 2. Continuous Angle Calculation
-        const angle = Phaser.Math.Angle.Between(this.container.x, this.container.y, targetX, targetY);
+        this.aimAngle = Phaser.Math.Angle.Between(this.container.x, this.container.y, targetX, targetY);
+        const angle = this.aimAngle;
         const flipFactor = this.container.scaleX < 0 ? -1 : 1;
 
         // Adjust arm rotation based on flip
@@ -372,15 +375,15 @@ export default class CharacterAssembler {
         this.refreshTextures();
     }
 
-    refreshTextures() {
+    refreshTextures(customApp = null) {
         if (!this.head || !this.head.scene) return; // Safety check
         const store = useGameStore.getState();
-        const app = this.type === 'player' ? store.appearance : {
+        const app = customApp || (this.type === 'player' ? store.appearance : {
             head: this.type === 'sarge' ? 'sarge' : 'enemy',
             torso: this.type === 'sarge' ? 'sarge' : 'enemy',
             arms: this.type === 'sarge' ? 'sarge' : 'enemy',
             legs: this.type === 'sarge' ? 'sarge' : 'enemy'
-        };
+        });
 
         this.legBack.setTexture(`leg-${app.legs}`);
         this.legFront.setTexture(`leg-${app.legs}`);

@@ -4,6 +4,8 @@ import SargeAI from '../entities/SargeAI';
 import CharacterAssembler from '../utils/CharacterAssembler';
 import Pathfinder from '../utils/Pathfinder';
 import { useGameStore } from '../../store/gameStore';
+import socketManager from '../../utils/SocketManager';
+import NetworkPlayer from '../entities/NetworkPlayer';
 
 export default class MainGame extends Phaser.Scene {
     constructor() {
@@ -11,9 +13,21 @@ export default class MainGame extends Phaser.Scene {
     }
 
     create() {
-        useGameStore.getState().setHasProgress(true);
-        this.kills = 0;
-        this.wave = 1;
+        const store = useGameStore.getState();
+        this.gameMode = store.gameMode;
+        this.roomCode = store.roomCode;
+        
+        if (this.gameMode === 'SOLO') {
+            store.setHasProgress(true);
+            this.kills = 0;
+            this.wave = 1;
+        } else {
+            // PvP specific init
+            this.networkPlayers = new Map();
+            this.networkHitboxes = this.physics.add.group();
+            this.setupPvPSocket();
+            this.setupPvPUI();
+        }
         // Generate placeholder textures
         const g = this.make.graphics({ x: 0, y: 0, add: false });
         g.fillStyle(0xFFFF00); g.fillRect(0, 0, 8, 8); g.generateTexture('bullet_player', 8, 8);
@@ -103,11 +117,19 @@ export default class MainGame extends Phaser.Scene {
 
         // Default spawn if none found
         if (this.playerSpawns.length === 0) this.playerSpawns.push({ x: this.worldWidth / 2, y: this.worldHeight - 300 });
-        const initialSpawn = this.playerSpawns[0];
-
+        
+        // Randomize spawn in PVP to avoid overlap
+        let initialSpawn = this.playerSpawns[0];
+        if (this.gameMode === 'PVP') {
+            initialSpawn = this.playerSpawns[Math.floor(Math.random() * this.playerSpawns.length)];
+        }
+        
         // 2. Initialize Hero Characters
         this.player = new Player(this, initialSpawn.x, initialSpawn.y - 50);
-        this.sarge = new SargeAI(this, initialSpawn.x - 50, initialSpawn.y - 50, this.player, this.pathfinder);
+        
+        if (this.gameMode === 'SOLO') {
+            this.sarge = new SargeAI(this, initialSpawn.x - 50, initialSpawn.y - 50, this.player, this.pathfinder);
+        }
 
         // 3. Second Pass: Spawn Enemies and Loot (Now safe to access this.player)
         this.enemySpawnPoints = [];
@@ -123,53 +145,75 @@ export default class MainGame extends Phaser.Scene {
             });
         }
 
-        // Initial Populate
-        for (let i = 0; i < 10; i++) this.spawnEnemy();
+        // Initial Populate (SOLO ONLY)
+        if (this.gameMode === 'SOLO') {
+            for (let i = 0; i < 10; i++) this.spawnEnemy();
 
-        const store = useGameStore.getState();
-        this.player.weapons.addWeapon(store.selectedWeapons[0] || 'pistol');
-        this.player.weapons.addWeapon('dagger');
+            if (store.userProfile && !store.isNewGame) {
+                this.time.delayedCall(1500, () => {
+                    if (this.sarge) this.sarge.say("Where have you been, Pilot?", 4000);
+                });
+            }
 
-        if (store.userProfile && !store.isNewGame) {
-            this.time.delayedCall(1500, () => {
-                if (this.sarge) this.sarge.say("Where have you been, Pilot?", 4000);
+            // AI Initial Lock (Grounded for dialogue)
+            this.initialAILock = true;
+            this.time.delayedCall(4500, () => {
+                this.initialAILock = false;
             });
         }
 
-        // AI Initial Lock (Grounded for dialogue)
-        this.initialAILock = true;
-        this.time.delayedCall(4500, () => {
-            this.initialAILock = false;
-        });
+        // --- Weapon Setup ---
+        if (this.gameMode === 'PVP') {
+            this.player.weapons.addWeapon('pistol');
+            this.player.weapons.addWeapon('dagger');
+        } else {
+            this.player.weapons.addWeapon(store.selectedWeapons[0] || 'pistol');
+            this.player.weapons.addWeapon('dagger');
+        }
 
         // Colliders
         this.physics.add.collider(this.player.sprite, [this.platforms, this.physicsDetails]);
-        this.physics.add.collider(this.sarge.sprite, [this.platforms, this.physicsDetails]);
-        this.physics.add.collider(this.enemies, [this.platforms, this.physicsDetails]);
         this.physics.add.collider(this.weaponPickups, [this.platforms, this.physicsDetails]);
+
+        if (this.gameMode === 'SOLO') {
+            this.physics.add.collider(this.sarge.sprite, [this.platforms, this.physicsDetails]);
+            this.physics.add.collider(this.enemies, [this.platforms, this.physicsDetails]);
+        }
+
+        // PVP Overlaps (Prioritize hitting players over walls)
+        if (this.gameMode === 'PVP') {
+            this.physics.add.overlap(this.player.weapons.bullets, this.networkHitboxes, this.bulletHitRemotePlayer, null, this);
+        }
 
         this.physics.add.collider(this.player.weapons.bullets, [this.platforms, this.physicsDetails], (b) => {
             if (b.isRocket) b.onImpact(); else b.destroy();
         });
-        this.physics.add.collider(this.sarge.weapons.bullets, [this.platforms, this.physicsDetails], (b) => {
-            if (b.isRocket) b.onImpact(); else b.destroy();
-        });
-        this.physics.add.collider(this.enemyBullets, [this.platforms, this.physicsDetails], (b) => {
-            if (b.isRocket) b.onImpact(); else b.destroy();
-        });
+
+        if (this.gameMode === 'SOLO') {
+            this.physics.add.collider(this.sarge.weapons.bullets, [this.platforms, this.physicsDetails], (b) => {
+                if (b.isRocket) b.onImpact(); else b.destroy();
+            });
+            this.physics.add.collider(this.enemyBullets, [this.platforms, this.physicsDetails], (b) => {
+                if (b.isRocket) b.onImpact(); else b.destroy();
+            });
+        }
+
         this.physics.add.collider(this.player.weapons.grenadeGroup, [this.platforms, this.physicsDetails]);
-        this.physics.add.collider(this.player.weapons.grenadeGroup, this.enemies);
         this.physics.add.collider(this.player.weapons.grenadeGroup, this.player.sprite);
-        this.physics.add.collider(this.player.weapons.grenadeGroup, this.sarge.sprite);
 
-        this.physics.add.overlap(this.player.weapons.bullets, this.enemies, this.bulletHitEnemy, null, this);
-        this.physics.add.overlap(this.sarge.weapons.bullets, this.enemies, this.bulletHitEnemy, null, this);
-        this.physics.add.overlap(this.enemyBullets, this.sarge.sprite, (s, b) => {
-            if (b.isRocket) b.onImpact(); else b.destroy();
-        }, null, this);
+        if (this.gameMode === 'SOLO') {
+            this.physics.add.collider(this.player.weapons.grenadeGroup, this.enemies);
+            this.physics.add.collider(this.player.weapons.grenadeGroup, this.sarge.sprite);
+            
+            this.physics.add.overlap(this.player.weapons.bullets, this.enemies, this.bulletHitEnemy, null, this);
+            this.physics.add.overlap(this.sarge.weapons.bullets, this.enemies, this.bulletHitEnemy, null, this);
+            this.physics.add.overlap(this.enemyBullets, this.sarge.sprite, (s, b) => {
+                if (b.isRocket) b.onImpact(); else b.destroy();
+            }, null, this);
 
-        this.physics.add.overlap(this.enemyBullets, this.player.sprite, this.enemyBulletHitPlayer, null, this);
-        this.physics.add.overlap(this.enemies, this.player.sprite, () => this.player.takeDamage(1), null, this);
+            this.physics.add.overlap(this.enemyBullets, this.player.sprite, this.enemyBulletHitPlayer, null, this);
+            this.physics.add.overlap(this.enemies, this.player.sprite, () => this.player.takeDamage(1), null, this);
+        }
 
         // Zoom
         this.currentZoomIndex = 0;
@@ -186,8 +230,132 @@ export default class MainGame extends Phaser.Scene {
         this.input.keyboard.on('keydown-Z', () => this.toggleZoom());
         this.input.keyboard.on('keydown-ESC', () => this.togglePause());
 
-        // Enemy Spawner
-        this.time.addEvent({ delay: 3000, callback: this.spawnEnemy, callbackScope: this, loop: true });
+        // Enemy Spawner (SOLO ONLY)
+        if (this.gameMode === 'SOLO') {
+            this.time.addEvent({ delay: 3000, callback: this.spawnEnemy, callbackScope: this, loop: true });
+        }
+    }
+
+    setupPvPSocket() {
+        this.onRemoteUpdate = (data) => {
+            let remotePlayer = this.networkPlayers.get(data.id);
+            if (!remotePlayer) {
+                const pData = useGameStore.getState().pvpPlayers.find(p => p.id === data.id);
+                if (pData) {
+                    remotePlayer = new NetworkPlayer(this, data.id, pData.name, pData.avatar);
+                    this.networkPlayers.set(data.id, remotePlayer);
+                    this.networkHitboxes.add(remotePlayer.hitbox);
+                }
+            }
+            if (remotePlayer) {
+                // If they were dead/hidden, reactivate them
+                if (!remotePlayer.assembler.container.visible) {
+                    remotePlayer.assembler.reset();
+                    remotePlayer.hitbox.setActive(true);
+                    remotePlayer.hitbox.body.setEnable(true);
+                }
+                remotePlayer.updateTransform(data.transform);
+            }
+        };
+
+        this.onPlayerJoined = (data) => {
+            this.syncNetworkPlayers(data.players);
+        };
+
+        this.onPlayerFire = (data) => {
+            const remotePlayer = this.networkPlayers.get(data.id);
+            if (remotePlayer) {
+                remotePlayer.spawnVisualBullet(data.angle, data.weapon);
+            }
+        };
+
+        this.onPlayerOffline = (id) => {
+            const remotePlayer = this.networkPlayers.get(id);
+            if (remotePlayer) remotePlayer.setOffline();
+        };
+
+        this.onKillAnnouncement = (data) => {
+            this.handleKillAnnouncement(data);
+        };
+
+        this.onTimerTick = (seconds) => {
+            if (this.pvpTimerText) {
+                const mins = Math.floor(seconds / 60);
+                const secs = seconds % 60;
+                this.pvpTimerText.setText(`${mins}:${secs < 10 ? '0' : ''}${secs}`);
+            }
+        };
+
+        this.onMatchEnded = (leaderboard) => {
+            this.scene.start('MatchResults', { leaderboard });
+        };
+
+        socketManager.on('remote_player_update', this.onRemoteUpdate);
+        socketManager.on('player_joined', this.onPlayerJoined);
+        socketManager.on('player_fire', this.onPlayerFire);
+        this.onPlayerHit = (data) => {
+            if (this.player) {
+                this.player.lastAttackerId = data.attackerId;
+                this.player.takeDamage(data.damage);
+                this.cameras.main.shake(100, 0.01);
+            }
+        };
+
+        socketManager.on('player_hit', this.onPlayerHit);
+        socketManager.on('player_offline', this.onPlayerOffline);
+        socketManager.on('kill_announcement', this.onKillAnnouncement);
+        socketManager.on('timer_tick', this.onTimerTick);
+        socketManager.on('match_ended', this.onMatchEnded);
+
+        this.events.once('shutdown', () => {
+            socketManager.off('remote_player_update', this.onRemoteUpdate);
+            socketManager.off('player_joined', this.onPlayerJoined);
+            socketManager.off('player_fire', this.onPlayerFire);
+            socketManager.off('player_hit', this.onPlayerHit);
+            socketManager.off('player_offline', this.onPlayerOffline);
+            socketManager.off('kill_announcement', this.onKillAnnouncement);
+            socketManager.off('timer_tick', this.onTimerTick);
+            socketManager.off('match_ended', this.onMatchEnded);
+        });
+    }
+
+    setupPvPUI() {
+        this.killFeedContainer = this.add.container(20, 20).setScrollFactor(0).setDepth(100);
+        this.matchTimerText = this.add.text(this.cameras.main.width / 2, 20, '05:00', {
+            font: 'bold 24px monospace',
+            fill: '#ffffff',
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            padding: { x: 10, y: 5 }
+        }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(100);
+    }
+
+    showKillFeed(killer, victim) {
+        const text = this.add.text(0, 0, `${killer} KILLED ${victim}`, {
+            font: 'bold 16px monospace',
+            fill: '#ef4444'
+        });
+        this.killFeedContainer.add(text);
+        
+        // Stack existing ones up
+        this.killFeedContainer.list.forEach((child, i) => {
+            if (child !== text) child.y += 25;
+        });
+
+        this.time.delayedCall(3000, () => {
+            this.tweens.add({
+                targets: text,
+                alpha: 0,
+                duration: 500,
+                onComplete: () => text.destroy()
+            });
+        });
+    }
+
+    updateMatchTimer(timeLeft) {
+        const mins = Math.floor(timeLeft / 60);
+        const secs = timeLeft % 60;
+        this.matchTimerText.setText(`${mins}:${secs < 10 ? '0' : ''}${secs}`);
+        if (timeLeft <= 30) this.matchTimerText.setFill('#ef4444');
     }
 
     togglePause() {
@@ -252,6 +420,18 @@ export default class MainGame extends Phaser.Scene {
     onPlayerDeath() {
         if (this.player.isRespawning) return;
         this.player.isRespawning = true;
+
+        if (this.gameMode === 'PVP') {
+            // Tell server I died and who killed me
+            socketManager.sendDeath(this.player.lastAttackerId);
+            
+            this.time.delayedCall(1000, () => this.cameras.main.fadeOut(500, 0, 0, 0));
+            this.time.delayedCall(2000, () => {
+                this.respawnPlayerPvP();
+                this.cameras.main.fadeIn(500, 0, 0, 0);
+            });
+            return;
+        }
 
         // Drop current weapon (if not pistol)
         const currentWeapon = this.player.weapons.inventory[this.player.weapons.currentSlot];
@@ -552,6 +732,17 @@ export default class MainGame extends Phaser.Scene {
         }
     }
 
+    enemyBulletHitPlayer(playerSprite, bullet) {
+        if (!bullet || !bullet.active) return;
+        if (bullet.isRocket) {
+            bullet.onImpact();
+            return;
+        }
+
+        this.player.takeDamage(bullet.damage || 10);
+        bullet.destroy();
+    }
+
     bulletHitEnemy(bullet, enemy) {
         if (!bullet.active || !enemy.active) return;
         if (bullet.isRocket) { bullet.onImpact(); return; }
@@ -590,23 +781,65 @@ export default class MainGame extends Phaser.Scene {
         }
     }
 
-    enemyBulletHitPlayer(playerSprite, bullet) {
-        if (!bullet || !bullet.active) return;
-        if (bullet.isRocket) {
-            bullet.onImpact();
-            return;
-        }
+    // PvP methods
+    respawnPlayerPvP() {
+        if (!this.player || !this.player.sprite) return;
+        const spawn = this.playerSpawns[Math.floor(Math.random() * this.playerSpawns.length)];
+        this.player.health = 100;
+        this.player.isRespawning = false;
+        this.player.sprite.setPosition(spawn.x, spawn.y);
+        this.player.sprite.setActive(true).setVisible(false); // KEEP INVISIBLE
+        this.player.visual.reset();
+        this.player.syncUI();
+    }
 
-        this.player.takeDamage(bullet.damage || 10);
-        bullet.destroy();
+    bulletHitRemotePlayer(bullet, hitbox) {
+        if (!bullet.active || !hitbox.active) return;
+        const victim = hitbox.owner;
+        if (!victim) return;
+
+        // Visual Hit Feedback locally
+        const particles = this.add.particles(bullet.x, bullet.y, 'explosion_part', {
+            speed: { min: 50, max: 150 },
+            lifespan: 200,
+            scale: { start: 0.5, end: 0 },
+            quantity: 5,
+            tint: 0xff0000
+        });
+        this.time.delayedCall(200, () => particles.destroy());
+
+        // Send HIT event with damage
+        const damage = bullet.damage || 20;
+        socketManager.sendHit(victim.id, damage);
+        
+        if (bullet.isRocket) bullet.onImpact(); else bullet.destroy();
     }
 
     update(time, delta) {
-        if (this.player) this.player.update(time, delta, this.input.activePointer);
-        if (this.sarge) this.sarge.update(time, delta, this.enemies, this.initialAILock);
+        if (this.player) {
+            this.player.update(time, delta, this.input.activePointer);
+            
+            // Sync to server if PvP
+            if (this.gameMode === 'PVP' && time % 50 < delta) { // ~20fps sync
+                socketManager.sendUpdate({
+                    x: this.player.sprite.x,
+                    y: this.player.sprite.y,
+                    flipX: this.player.visual.container.scaleX < 0,
+                    aimAngle: this.player.visual.aimAngle || 0,
+                    currentAnim: Math.abs(this.player.sprite.body.velocity.x) > 10 ? 'walk' : 'idle',
+                    weapon: this.player.weapons.inventory[this.player.weapons.currentSlot],
+                    isShooting: this.player.isShooting
+                });
+            }
+        }
+        
+        if (this.gameMode === 'SOLO' && this.sarge) {
+            this.sarge.update(time, delta, this.enemies, this.initialAILock);
+        }
 
-        // Update all enemies
-        this.enemies.getChildren().forEach(enemy => {
+        if (this.gameMode === 'SOLO') {
+            // Update all enemies
+            this.enemies.getChildren().forEach(enemy => {
             if (!enemy.active) return;
 
             // 1. Visual Sync
@@ -722,6 +955,7 @@ export default class MainGame extends Phaser.Scene {
                 }
             }
         });
+        }
 
         // REFINED: Camera smoothing and mouse peeking
         const cam = this.cameras.main;
@@ -732,5 +966,149 @@ export default class MainGame extends Phaser.Scene {
         cam.scrollX += (targetX - (cam.scrollX + cam.width / 2)) * 0.15;
         cam.scrollY += (targetY - (cam.scrollY + cam.height / 2)) * 0.15;
     }
+
+    // --- PvP Synchronization & UI ---
+
+    setupPvPSocket() {
+        this.onRemoteUpdate = (data) => {
+            let remotePlayer = this.networkPlayers.get(data.id);
+            if (!remotePlayer) {
+                const pData = useGameStore.getState().pvpPlayers.find(p => p.id === data.id);
+                if (pData) {
+                    remotePlayer = new NetworkPlayer(this, data.id, pData.name, pData.avatar);
+                    this.networkPlayers.set(data.id, remotePlayer);
+                    this.networkHitboxes.add(remotePlayer.hitbox);
+                }
+            }
+            if (remotePlayer) remotePlayer.updateTransform(data.transform);
+        };
+
+        this.onPlayerJoined = (data) => {
+            this.syncNetworkPlayers(data.players);
+        };
+
+        this.onPlayerFire = (data) => {
+            const remotePlayer = this.networkPlayers.get(data.id);
+            if (remotePlayer) {
+                remotePlayer.spawnVisualBullet(data.angle, data.weapon);
+            }
+        };
+
+        this.onPlayerOffline = (id) => {
+            const remotePlayer = this.networkPlayers.get(id);
+            if (remotePlayer) remotePlayer.setOffline();
+        };
+
+        this.onKillAnnouncement = (data) => {
+            this.handleKillAnnouncement(data);
+        };
+
+        this.onTimerTick = (seconds) => {
+            if (this.pvpTimerText) {
+                const mins = Math.floor(seconds / 60);
+                const secs = seconds % 60;
+                this.pvpTimerText.setText(`${mins}:${secs < 10 ? '0' : ''}${secs}`);
+            }
+        };
+
+        this.onMatchEnded = (leaderboard) => {
+            this.scene.start('MatchResults', { leaderboard });
+        };
+
+        socketManager.on('remote_player_update', this.onRemoteUpdate);
+        socketManager.on('player_joined', this.onPlayerJoined);
+        socketManager.on('player_fire', this.onPlayerFire);
+        socketManager.on('player_offline', this.onPlayerOffline);
+        socketManager.on('kill_announcement', this.onKillAnnouncement);
+        socketManager.on('timer_tick', this.onTimerTick);
+        socketManager.on('match_ended', this.onMatchEnded);
+
+        this.events.once('shutdown', () => {
+            socketManager.off('remote_player_update', this.onRemoteUpdate);
+            socketManager.off('player_joined', this.onPlayerJoined);
+            socketManager.off('player_fire', this.onPlayerFire);
+            socketManager.off('player_offline', this.onPlayerOffline);
+            socketManager.off('kill_announcement', this.onKillAnnouncement);
+            socketManager.off('timer_tick', this.onTimerTick);
+            socketManager.off('match_ended', this.onMatchEnded);
+        });
+    }
+
+    syncNetworkPlayers(players) {
+        if (!players) return;
+        players.forEach(p => {
+            if (p.id === socketManager.socket.id) return;
+            if (!this.networkPlayers.has(p.id)) {
+                const np = new NetworkPlayer(this, p.id, p.name, p.avatar);
+                this.networkPlayers.set(p.id, np);
+                this.networkHitboxes.add(np.hitbox);
+            }
+        });
+    }
+
+    setupPvPUI() {
+        const { width, height } = this.cameras.main;
+        
+        // Timer
+        this.pvpTimerText = this.add.text(width / 2, 40, '05:00', {
+            font: 'bold 24px monospace',
+            fill: '#ffffff',
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            padding: { x: 10, y: 5 }
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(100);
+
+        // Kill Feed Container
+        this.killFeedContainer = this.add.container(width - 20, 100).setScrollFactor(0).setDepth(100);
+    }
+
+    addKillFeed(text) {
+        if (!this.killFeedContainer) return;
+        
+        const feedText = this.add.text(0, 0, text, {
+            font: 'bold 14px monospace',
+            fill: '#ffffff',
+            backgroundColor: 'rgba(239, 68, 68, 0.7)',
+            padding: { x: 8, y: 4 }
+        }).setOrigin(1, 0);
+
+        this.killFeedContainer.add(feedText);
+
+        // Shift existing feed items down
+        this.killFeedContainer.list.forEach((item) => {
+            if (item !== feedText) {
+                this.tweens.add({
+                    targets: item,
+                    y: item.y + 30,
+                    duration: 200
+                });
+            }
+        });
+
+        this.time.delayedCall(4000, () => {
+            if (feedText.active) {
+                this.tweens.add({
+                    targets: feedText,
+                    alpha: 0,
+                    duration: 500,
+                    onComplete: () => feedText.destroy()
+                });
+            }
+        });
+    }
+
+    handleKillAnnouncement(data) {
+        this.addKillFeed(`${data.killerName} killed ${data.victimName}`);
+
+        // Visual death for victim
+        const victim = this.networkPlayers.get(data.victimId);
+        if (victim) {
+            victim.assembler.explode();
+            victim.hitbox.setActive(false);
+            victim.hitbox.body.setEnable(false);
+        }
+
+        // If I was the victim, I've already handled my death locally
+    }
+
 }
 

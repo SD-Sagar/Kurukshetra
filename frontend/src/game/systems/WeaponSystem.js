@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import socketManager from '../../utils/SocketManager';
 
 export default class WeaponSystem {
     constructor(scene, owner, visual = null) {
@@ -221,6 +222,13 @@ export default class WeaponSystem {
             spawnY = muzzle.y;
         }
 
+        const angle = Phaser.Math.Angle.Between(this.owner.x, this.owner.y, targetX, targetY);
+
+        // Sync fire event for PVP
+        if (this.owner === this.scene.player?.sprite && this.scene.gameMode === 'PVP') {
+            socketManager.sendFire(angle, weapon.key);
+        }
+
         const bullet = this.bullets.get(spawnX, spawnY, 'bullet_player');
         if (bullet) {
             bullet.setActive(true).setVisible(true);
@@ -229,7 +237,7 @@ export default class WeaponSystem {
             if (bullet.body) {
                 bullet.body.reset(spawnX, spawnY);
                 bullet.body.setAllowGravity(false); // ENSURE NO GRAVITY
-                bullet.body.setSize(weapon.isRocket ? 16 : 8, 8);
+                bullet.body.setSize(12, 12);
             }
 
             bullet.damage = weapon.damage;
