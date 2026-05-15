@@ -28,7 +28,6 @@ export default class MainMenu extends Phaser.Scene {
                 action: hasProgress ? () => this.continueSolo() : () => {}, 
                 color: hasProgress ? '#ffffff' : '#64748b' 
             },
-            { text: 'MULTIPLAYER (PvP)', action: () => this.startMultiplayer() },
             { text: 'CO-OP (COMING SOON)', action: () => {}, color: '#64748b' },
             { text: 'EXIT', action: () => this.exitGame(), color: '#ef4444' }
         ];
@@ -59,16 +58,6 @@ export default class MainMenu extends Phaser.Scene {
     continueSolo() {
         useGameStore.getState().setIsNewGame(false);
         this.scene.start('Armory');
-    }
-
-    startMultiplayer() {
-        const { isGuest } = useGameStore.getState();
-        if (isGuest) {
-            alert("Register or login to play with friends");
-        } else {
-            useGameStore.getState().setGameMode('PVP');
-            this.scene.start('PvPArmory');
-        }
     }
 
     exitGame() {

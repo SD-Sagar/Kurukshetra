@@ -2,12 +2,9 @@ import Phaser from 'phaser';
 import Preloader from './scenes/Preloader';
 import MainMenu from './scenes/MainMenu';
 import Armory from './scenes/Armory';
-import PvPArmory from './scenes/PvPArmory';
-import PvPLobby from './scenes/PvPLobby';
 import Scene1_Breach from './scenes/Scene1_Breach';
 import Scene2_Recruitment from './scenes/Scene2_Recruitment';
 import MainGame from './scenes/MainGame';
-import MatchResults from './scenes/MatchResults';
 
 export default function initGame(containerId) {
     const config = {
@@ -32,12 +29,9 @@ export default function initGame(containerId) {
             Preloader,
             MainMenu,
             Armory,
-            PvPArmory,
-            PvPLobby,
             Scene1_Breach,
             Scene2_Recruitment,
-            MainGame,
-            MatchResults
+            MainGame
         ],
         backgroundColor: '#111827'
     };
