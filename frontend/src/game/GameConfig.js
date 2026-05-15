@@ -20,7 +20,9 @@ export default function initGame(containerId) {
             default: 'arcade',
             arcade: {
                 gravity: { y: 600 },
-                debug: false 
+                debug: false,
+                tileBias: 40,
+                fps: 120
             }
         },
         scene: [

@@ -19,9 +19,19 @@ const UserSchema = new mongoose.Schema({
         type: Number,
         default: 0
     },
-    highScore: {
+    totalKills: {
         type: Number,
         default: 0
+    },
+    appearance: {
+        head: { type: String, default: 'Commando' },
+        torso: { type: String, default: 'Commando' },
+        legs: { type: String, default: 'Commando' },
+        arms: { type: String, default: 'commando' }
+    },
+    selectedWeapons: {
+        type: [String],
+        default: ['pistol', null]
     }
 }, { timestamps: true });
 

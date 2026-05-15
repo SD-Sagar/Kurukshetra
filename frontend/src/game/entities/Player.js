@@ -6,13 +6,13 @@ import { useGameStore } from '../../store/gameStore';
 export default class Player {
     constructor(scene, x, y) {
         this.scene = scene;
-        
+
         // 1. Create the Visual Assembly
         this.visual = new CharacterAssembler(scene, { type: 'player' });
-        
+
         // 2. Create an invisible Physics Sprite for collision (The Hitbox)
         // We use a separate sprite so the container can flip and animate freely
-        this.sprite = this.scene.physics.add.sprite(x, y, null);
+        this.sprite = this.scene.physics.add.sprite(x, y, 'white_square');
         this.sprite.body.setSize(40, 80);
         this.sprite.setVisible(false); // Invisible hitbox
         this.sprite.setCollideWorldBounds(true);
@@ -23,6 +23,7 @@ export default class Player {
         this.fuel = 100;
         this.maxFuel = 100;
         this.isCrouching = false;
+        this.isRespawning = false;
         this.lastDamageTime = 0;
 
         // Systems
@@ -55,21 +56,36 @@ export default class Player {
             this.switchSlot(nextSlot);
         });
 
-        // Mouse click for shooting
+        // Mouse click for shooting + Force Focus
         this.scene.input.on('pointerdown', (pointer) => {
             if (pointer.leftButtonDown()) this.isShooting = true;
+            // Ensure keyboard is focused
+            if (this.scene.input.keyboard) this.scene.input.keyboard.enabled = true;
         });
         this.scene.input.on('pointerup', () => {
             this.isShooting = false;
         });
+
+        // 3. Jetpack Particles
+        this.jetpackParticles = this.scene.add.particles(0, 0, 'bullet_player', {
+            speed: { min: 50, max: 150 },
+            angle: { min: 80, max: 100 },
+            scale: { start: 1.5, end: 0 },
+            lifespan: 400,
+            gravityY: 400,
+            frequency: -1, // Manually controlled
+            tint: 0xffaa44,
+            blendMode: 'ADD'
+        });
+        this.jetpackParticles.setDepth(5);
     }
 
     update(time, delta, pointer) {
-        if (!this.sprite || !this.sprite.active || !this.sprite.body) return;
-        
-        // Sync visual with physics body
-        this.visual.container.setPosition(this.sprite.x, this.sprite.y);
-        
+        if (!this.sprite || !this.sprite.body || !this.sprite.active || this.isRespawning) return;
+
+        // Sync visual with physics body - Locked Standing Offset
+        this.visual.container.setPosition(this.sprite.x, this.sprite.y + 10);
+
         this.handleMovement(delta);
         this.handleCombat();
         this.handleHealthRegen(time);
@@ -77,8 +93,8 @@ export default class Player {
 
         // Update visual animations & Weapon Color
         const currentWpKey = this.weapons.inventory[this.weapons.currentSlot];
-        this.visual.update(time, delta, this.sprite.body.velocity.x, this.isCrouching, currentWpKey);
-        
+        this.visual.update(time, delta, this.sprite.body.velocity.x, false, currentWpKey, this.weapons.grenades);
+
         // Handle aiming with mouse pointer
         if (pointer) {
             const worldPoint = this.scene.cameras.main.getWorldPoint(pointer.x, pointer.y);
@@ -87,45 +103,43 @@ export default class Player {
     }
 
     handleMovement(delta) {
-        const moveSpeed = this.isCrouching ? 100 : 300; // Slow waddle while crouching
+        const isOnGround = this.sprite.body.touching.down || this.sprite.body.blocked.down;
+        
+        // DYNAMIC PHYSICS: More drag on ground for stopping, less in air for drifting
+        const accel = isOnGround ? 1000 : 1200; 
+        const drag = isOnGround ? 800 : 200; 
+        const maxSpeed = 500;
 
-        // Horizontal Movement
+        this.sprite.body.setMaxVelocity(maxSpeed, 1000);
+        this.sprite.body.setDragX(drag);
+
+        // Horizontal Movement (Acceleration-based for "Drift" feel)
         if (this.keys.left.isDown) {
-            this.sprite.setVelocityX(-moveSpeed);
+            this.sprite.setAccelerationX(-accel);
         } else if (this.keys.right.isDown) {
-            this.sprite.setVelocityX(moveSpeed);
+            this.sprite.setAccelerationX(accel);
         } else {
-            this.sprite.setVelocityX(0);
+            this.sprite.setAccelerationX(0);
         }
 
-        // Jetpack / Jump (15-second duration)
-        if (this.keys.space.isDown || this.keys.up.isDown) {
-            if (this.fuel > 0) {
-                this.sprite.setAccelerationY(-2000); 
-                // 100 fuel / 15000ms = 0.0066
-                this.fuel = Math.max(0, this.fuel - (delta * 0.0066)); 
-            } else {
-                this.sprite.setAccelerationY(0);
-            }
+        // Jetpack / Jump (Mini Militia Style)
+        const isJumping = this.keys.space.isDown || this.keys.up.isDown;
+        
+        if (isJumping && this.fuel > 0) {
+            this.sprite.setAccelerationY(-2000);
+            this.fuel = Math.max(0, this.fuel - (delta * 0.0066));
+            
+            // Particles - LOWERED POSITION (y + 55)
+            this.jetpackParticles.emitParticleAt(this.sprite.x, this.sprite.y + 55);
         } else {
             this.sprite.setAccelerationY(0);
-            // Recharge fuel smoothly (takes 10 seconds to full)
-            if (this.sprite.body.touching.down) {
-                this.fuel = Math.min(this.maxFuel, this.fuel + (delta * 0.01)); 
+            
+            // Recharge fuel
+            if (isOnGround) {
+                this.fuel = Math.min(this.maxFuel, this.fuel + (delta * 0.02));
+            } else {
+                this.fuel = Math.min(this.maxFuel, this.fuel + (delta * 0.002));
             }
-        }
-
-        // Tactical Crouch
-        if (this.keys.down.isDown && this.sprite.body.touching.down) {
-            if (!this.isCrouching) {
-                this.isCrouching = true;
-                this.sprite.body.setSize(40, 40);
-                this.sprite.body.setOffset(0, 40);
-            }
-        } else if (!this.keys.down.isDown && this.isCrouching) {
-            this.isCrouching = false;
-            this.sprite.body.setSize(40, 80);
-            this.sprite.body.setOffset(0, 0);
         }
     }
 
@@ -158,9 +172,29 @@ export default class Player {
         });
 
         if (nearest) {
+            // Trigger Respawn Timer if it was a permanent map item
+            if (nearest.isPermanent) {
+                this.scene.handleLootPickup(nearest.pointIndex);
+            }
+
+            // GRENADE PICKUP
+            if (nearest.weaponKey === 'grenade') {
+                this.weapons.grenades += 3;
+                nearest.destroy();
+                return;
+            }
+
+            // MEDKIT PICKUP
+            if (nearest.weaponKey === 'medkit') {
+                this.health = 100;
+                this.syncUI();
+                nearest.destroy();
+                return;
+            }
+
             // 1. Check if we already have this weapon in ANY slot
             const duplicateSlot = this.weapons.inventory.indexOf(nearest.weaponKey);
-            
+
             if (duplicateSlot !== -1) {
                 // It's a duplicate! Just add ammo and destroy pickup
                 this.weapons.addWeapon(nearest.weaponKey, nearest.ammo);
@@ -172,8 +206,8 @@ export default class Player {
             const currentKey = this.weapons.inventory[this.weapons.currentSlot];
             if (currentKey) {
                 const dropped = this.weapons.dropCurrentWeapon();
-                // Toss the weapon slightly so it doesn't clip
-                this.scene.spawnWeaponPickup(this.sprite.x, this.sprite.y - 20, dropped.key, dropped.ammo);
+                // Toss the weapon slightly so it doesn't clip (Dropped weapons are temporary)
+                this.scene.spawnWeaponPickup(this.sprite.x, this.sprite.y - 20, dropped.key, dropped.ammo, false);
             }
 
             this.weapons.addWeapon(nearest.weaponKey, nearest.ammo);
@@ -194,9 +228,16 @@ export default class Player {
     }
 
     takeDamage(amount) {
-        const finalDamage = this.isCrouching ? amount / 2 : amount;
-        this.health = Math.max(0, this.health - finalDamage);
+        if (this.isRespawning) return;
+        this.health = Math.max(0, this.health - amount);
+        this.syncUI();
         this.lastDamageTime = this.scene.time.now;
+
+        if (this.health <= 0) {
+            this.visual.explode();
+            this.sprite.setActive(false).setVisible(false);
+            this.scene.onPlayerDeath();
+        }
     }
 
     syncUI() {
@@ -204,7 +245,7 @@ export default class Player {
         store.setPlayerHealth(this.health);
         store.setPlayerFuel(this.fuel);
         store.setGrenades(this.weapons.grenades);
-        
+
         const slotAmmo = this.weapons.ammo[this.weapons.currentSlot];
         if (this.weapons.inventory[this.weapons.currentSlot]) {
             store.setAmmo(slotAmmo.loaded, slotAmmo.reserve);

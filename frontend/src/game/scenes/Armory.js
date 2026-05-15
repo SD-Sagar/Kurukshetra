@@ -7,11 +7,25 @@ export default class Armory extends Phaser.Scene {
         super('Armory');
     }
 
+    init(data) {
+        this.activeTab = data?.tab || 'weapons';
+    }
+
     create() {
+        useGameStore.getState().setShowHUD(false);
         const { width, height } = this.cameras.main;
         const store = useGameStore.getState();
 
         this.add.rectangle(0, 0, width, height, 0x1e293b).setOrigin(0, 0);
+        
+        // Back Button
+        this.add.text(50, 50, '< BACK TO MENU', {
+            font: 'bold 18px monospace',
+            fill: '#94a3b8'
+        })
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', () => this.scene.start('MainMenu'));
+
         this.add.text(width / 2, 50, 'ARMORY - SELECT LOADOUT', {
             font: 'bold 32px monospace',
             fill: '#fbbf24'
@@ -22,31 +36,123 @@ export default class Armory extends Phaser.Scene {
         this.playerPreview.container.setPosition(200, height / 2 + 50);
         this.playerPreview.container.setScale(1);
 
-        // Weapon Options
-        const weapons = [
-            { key: 'pistol', name: 'PISTOL', color: '#4ade80' },
-            { key: 'smg', name: 'SMG', color: '#3b82f6' },
-            { key: 'rifle', name: 'RIFLE', color: '#facc15' },
-            { key: 'shotgun', name: 'SHOTGUN', color: '#8b5cf6' }
-        ];
+        // Slick Combat Record UI
+        const recordBox = this.add.container(50, height - 200);
+        const bg = this.add.rectangle(0, 0, 250, 120, 0x000000, 0.6).setOrigin(0);
+        const border = this.add.rectangle(0, 0, 250, 120).setOrigin(0).setStrokeStyle(2, 0x22d3ee, 0.8);
+        
+        const title = this.add.text(10, 10, 'COMBAT RECORD', { font: 'bold 16px monospace', fill: '#22d3ee' });
+        this.killsText = this.add.text(10, 45, `${store.totalKills} KILLS`, { font: 'bold 24px monospace', fill: '#ffffff' });
+        this.wavesText = this.add.text(10, 75, `WAVE ${store.highestWave} REACHED`, { font: '14px monospace', fill: '#94a3b8' });
 
-        this.selected = store.selectedWeapons[0];
+        recordBox.add([bg, border, title, this.killsText, this.wavesText]);
 
-        weapons.forEach((wp, i) => {
-            const btn = this.add.text(width - 300, 150 + (i * 60), wp.name, {
-                font: 'bold 20px monospace',
-                fill: this.selected === wp.key ? '#ffffff' : wp.color,
-                backgroundColor: this.selected === wp.key ? wp.color : '#0f172a',
-                padding: { x: 20, y: 10 }
-            })
-            .setOrigin(0, 0.5)
+        // Live Sync Data
+        if (!store.isGuest) {
+            store.fetchRecord().then(() => {
+                const updatedStore = useGameStore.getState();
+                if (this.killsText) this.killsText.setText(`${updatedStore.totalKills} KILLS`);
+                if (this.wavesText) this.wavesText.setText(`WAVE ${updatedStore.highestWave} REACHED`);
+            });
+        }
+
+        // Tabs (activeTab set in init)
+        const tabStyle = { font: 'bold 20px monospace', fill: '#ffffff', backgroundColor: '#334155', padding: { x: 20, y: 10 } };
+        const activeTabStyle = { ...tabStyle, backgroundColor: '#fbbf24', fill: '#000000' };
+
+        const weaponTabBtn = this.add.text(width - 400, 100, 'WEAPONS', this.activeTab === 'weapons' ? activeTabStyle : tabStyle)
             .setInteractive({ useHandCursor: true })
             .on('pointerdown', () => {
-                this.selected = wp.key;
-                store.setSelectedWeapons([wp.key, null]);
-                this.scene.restart();
+                this.activeTab = 'weapons';
+                this.scene.start('Armory', { tab: 'weapons' });
             });
-        });
+
+        const isGuest = store.isGuest || !store.userToken;
+
+        const appearanceTabBtn = this.add.text(width - 250, 100, isGuest ? 'CUSTOMIZE AVATAR' : 'APPEARANCE', this.activeTab === 'appearance' ? activeTabStyle : tabStyle)
+            .setInteractive({ useHandCursor: true })
+            .on('pointerdown', () => {
+                if (isGuest) {
+                    alert("Please register or login to customize your soldier!");
+                    return;
+                }
+                this.activeTab = 'appearance';
+                this.scene.start('Armory', { tab: 'appearance' });
+            });
+
+        if (this.activeTab === 'weapons') {
+            const weapons = [
+                { key: 'pistol', name: 'PISTOL', color: '#4ade80' },
+                { key: 'smg', name: 'SMG', color: '#3b82f6' },
+                { key: 'rifle', name: 'RIFLE', color: '#facc15' },
+                { key: 'shotgun', name: 'SHOTGUN', color: '#8b5cf6' }
+            ];
+
+            this.selected = store.selectedWeapons[0];
+
+            weapons.forEach((wp, i) => {
+                const isActive = this.selected === wp.key;
+                const btn = this.add.text(width - 300, 180 + (i * 60), wp.name, {
+                    font: 'bold 20px monospace',
+                    fill: isActive ? '#ffffff' : wp.color,
+                    backgroundColor: isActive ? wp.color : '#0f172a',
+                    padding: { x: 20, y: 10 }
+                })
+                .setOrigin(0, 0.5)
+                .setInteractive({ useHandCursor: true })
+                .on('pointerdown', async () => {
+                    this.selected = wp.key;
+                    await store.setSelectedWeapons([wp.key, null]);
+                    this.scene.restart();
+                });
+            });
+        } else {
+            // Appearance Selection (No Guests Allowed)
+            const options = [
+                { label: 'HEAD', key: 'head', values: ['Commando', 'Indiancaptain', 'Indiancommando', 'Indiancommando2', 'Ops', 'Soldire', 'Spetnaz', 'Spetnaz2', 'Terrorist'] },
+                { label: 'BODY', key: 'torso', values: ['Commando', 'Indiancommando', 'Indiancommando2', 'Ops', 'Soldire', 'Spetnaz2', 'Terrorist'] },
+                { label: 'ARMS', key: 'arms', values: ['commando', 'navy', 'soldire', 'spetnaz'] },
+                { label: 'LEGS', key: 'legs', values: ['Commando', 'Indiancommando', 'Ops', 'Soldire', 'Spetnaz', 'Spetnaz2', 'Terrorist'] }
+            ];
+
+            options.forEach((opt, i) => {
+                this.add.text(width - 300, 150 + (i * 70), opt.label, { font: 'bold 16px monospace', fill: '#94a3b8' });
+                
+                const currentVal = store.appearance[opt.key];
+                const currentIndex = opt.values.indexOf(currentVal);
+                const displayIndex = currentIndex + 1;
+
+                const btn = this.add.text(width - 300, 175 + (i * 70), `< MODEL ${displayIndex} >`, {
+                    font: 'bold 20px monospace',
+                    fill: '#ffffff',
+                    backgroundColor: '#1e293b',
+                    padding: { x: 15, y: 8 }
+                })
+                .setInteractive({ useHandCursor: true })
+                .on('pointerdown', async () => {
+                    const freshStore = useGameStore.getState();
+                    const currentValNow = freshStore.appearance[opt.key];
+                    const currentIndexNow = opt.values.indexOf(currentValNow);
+
+                    const nextIndex = (currentIndexNow + 1) % opt.values.length;
+                    const nextVal = opt.values[nextIndex];
+                    
+                    // Update specific part
+                    await store.setAppearance({ [opt.key]: nextVal });
+                    
+                    // Small logic: If changing torso, try to auto-match arms if names are close
+                    if (opt.key === 'torso') {
+                        const armMatch = nextVal.toLowerCase();
+                        if (['commando', 'soldire', 'spetnaz'].includes(armMatch)) {
+                            await store.setAppearance({ arms: armMatch });
+                        }
+                    }
+
+                    this.playerPreview.refreshTextures();
+                    btn.setText(`< MODEL ${nextIndex + 1} >`);
+                });
+            });
+        }
 
         // Deploy Button
         const deployBtn = this.add.text(width / 2, height - 80, 'DEPLOY TO BATTLEFIELD', {
@@ -68,20 +174,21 @@ export default class Armory extends Phaser.Scene {
             rifle: 0xfacc15,
             shotgun: 0x8b5cf6
         };
-        this.playerPreview.update(0, 16, 0, false, weaponColors[this.selected]);
+        
+        // Force sync the preview to the selected weapon
+        this.selected = store.selectedWeapons[0];
+        this.playerPreview.update(0, 16, 0, false, this.selected);
         this.playerPreview.aimAt(width, height / 2);
     }
 
     deploy() {
         const store = useGameStore.getState();
-        const isRegistered = !!store.userProfile;
+        const isRegistered = !!store.userToken;
         const isNewGame = store.isNewGame;
 
         if (isNewGame || (!isRegistered)) {
-            // New Game or Guest Continue -> Intro
             this.scene.start('Scene1_Breach');
         } else {
-            // Registered + Continue Solo -> Skip to MainGame
             this.scene.start('MainGame');
         }
     }
