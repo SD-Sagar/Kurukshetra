@@ -9,6 +9,7 @@ export const useGameStore = create((set) => ({
     isMobile: false,
     isGuest: false,
     grenades: 3,
+    godMode: false,
 
     // Character Customization
     appearance: {
@@ -41,6 +42,7 @@ export const useGameStore = create((set) => ({
     setZoomLevel: (zoom) => set({ zoomLevel: zoom }),
     setIsMobile: (isMobile) => set({ isMobile }),
     setGrenades: (count) => set({ grenades: count }),
+    setGodMode: (val) => set({ godMode: val }),
 
     setIsNewGame: (val) => set({ isNewGame: val }),
     showHUD: false,

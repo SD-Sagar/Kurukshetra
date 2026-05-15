@@ -503,6 +503,14 @@ export default class MainGame extends Phaser.Scene {
                         if (hitWall || hitPlayer || hitSarge) {
                             endX = px;
                             endY = py;
+
+                            // APPLY INSTANT DAMAGE
+                            if (hitPlayer) {
+                                this.enemyBulletHitPlayer(this.player.sprite, b);
+                            } else if (hitSarge) {
+                                // Sarge takes damage via the same logic as player
+                                this.enemyBulletHitPlayer(this.sarge.sprite, b);
+                            }
                             break;
                         }
                     }
@@ -514,7 +522,9 @@ export default class MainGame extends Phaser.Scene {
                         duration: 150,
                         onComplete: () => line.destroy()
                     });
-                    this.physics.moveTo(b, endX, endY, stats.muzzleSpeed);
+
+                    // For tracers, we destroy the bullet immediately since damage is already applied
+                    b.destroy();
                 } else {
                     const tx = enemy.x + Math.cos(angle) * 100;
                     const ty = enemy.y + Math.sin(angle) * 100;
