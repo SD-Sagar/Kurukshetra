@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { useGameStore } from '../../store/gameStore';
 
 export default class WeaponSystem {
     constructor(scene, owner, visual = null) {
@@ -20,7 +21,7 @@ export default class WeaponSystem {
             rifle: { name: 'Rifle', damage: 20, range: 1600, muzzleSpeed: 1300, fireRate: 110, magSize: 20, reloadTime: 2000, spread: 0.08, color: 0x00ff00, key: 'rifle', sound: 'rifle_sound' },
             sniper: { name: 'Sniper', damage: 85, range: 16000, muzzleSpeed: 2500, fireRate: 1500, magSize: 5, reloadTime: 3500, isTracer: true, color: 0xff00ff, key: 'sniper', sound: 'sniper_sound' },
             shotgun: { name: 'Shotgun', damage: 10, range: 800, muzzleSpeed: 900, fireRate: 800, magSize: 6, reloadTime: 2000, pellets: 8, fanAngle: 15, spread: 0.3, color: 0xffff00, key: 'shotgun', sound: 'shotgun_sound' },
-            launcher: { name: 'Launcher', damage: 100, range: 16000, muzzleSpeed: 600, fireRate: 2000, magSize: 3, reloadTime: 2500, isRocket: true, color: 0xff4500, key: 'launcher', sound: 'rocket-launcher_sound' },
+            launcher: { name: 'Launcher', damage: 100, range: 16000, muzzleSpeed: 828, fireRate: 2000, magSize: 3, reloadTime: 2500, isRocket: true, color: 0xff4500, key: 'launcher', sound: 'rocket-launcher_sound' },
             sarge_smg: { name: 'Sarge SMG', damage: 15, range: 6000, muzzleSpeed: 1200, fireRate: 110, magSize: 50, reloadTime: 2000, spread: 0.05, color: 0xffd700, key: 'sarge_smg', sound: 'rifle_sound' },
             dagger: { name: 'Dagger', damage: 35, range: 70, muzzleSpeed: 0, fireRate: 400, magSize: 999, reloadTime: 0, isMelee: true, color: 0xcccccc, key: 'dagger', sound: 'dagger_sound' },
             machinegun: { name: 'Machine Gun', damage: 20, range: 1600, muzzleSpeed: 1300, fireRate: 80, magSize: 100, reloadTime: 2500, spread: 0.12, color: 0x00ff88, key: 'machinegun', sound: 'rifle_sound' },
@@ -70,7 +71,10 @@ export default class WeaponSystem {
             return;
         }
 
-        this.ammo[this.currentSlot].loaded--;
+        const isPlayer = this.scene.player && this.owner === this.scene.player.sprite;
+        if (!isPlayer || !useGameStore.getState().godMode) {
+            this.ammo[this.currentSlot].loaded--;
+        }
         this.lastFired = now;
 
         const startX = this.owner.x;
@@ -327,7 +331,10 @@ export default class WeaponSystem {
 
     throwGrenade(targetX, targetY) {
         if (this.grenades <= 0) return;
-        this.grenades--;
+        const isPlayer = this.scene.player && this.owner === this.scene.player.sprite;
+        if (!isPlayer || !useGameStore.getState().godMode) {
+            this.grenades--;
+        }
 
         const throwAngle = Phaser.Math.Angle.Between(this.owner.x, this.owner.y, targetX, targetY);
         const spawnX = this.owner.x + Math.cos(throwAngle) * 45;

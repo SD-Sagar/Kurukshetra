@@ -30,6 +30,21 @@ export default class Armory extends Phaser.Scene {
             font: 'bold 32px monospace',
             fill: '#fbbf24'
         }).setOrigin(0.5);
+        
+        // God Mode Toggle
+        const godModeBtn = this.add.text(width - 150, 50, `GOD MODE: ${store.godMode ? 'ON' : 'OFF'}`, {
+            font: 'bold 16px monospace',
+            fill: store.godMode ? '#4ade80' : '#ef4444',
+            backgroundColor: '#0f172a',
+            padding: { x: 10, y: 5 }
+        })
+        .setOrigin(1, 0.5)
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', () => {
+            const newState = !store.godMode;
+            store.setGodMode(newState);
+            this.scene.restart();
+        });
 
         // Preview Character
         this.playerPreview = new CharacterAssembler(this, { type: 'player' });

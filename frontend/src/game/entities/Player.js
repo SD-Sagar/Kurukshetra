@@ -78,6 +78,10 @@ export default class Player {
             blendMode: 'ADD'
         });
         this.jetpackParticles.setDepth(5);
+
+        // 4. Laser Sight Graphics
+        this.laserGraphics = this.scene.add.graphics();
+        this.laserGraphics.setDepth(4);
     }
 
     update(time, delta, pointer) {
@@ -100,17 +104,19 @@ export default class Player {
             const worldPoint = this.scene.cameras.main.getWorldPoint(pointer.x, pointer.y);
             this.visual.aimAt(worldPoint.x, worldPoint.y);
         }
+
+        this.updateLaserSight();
     }
 
     handleMovement(delta) {
         const isOnGround = this.sprite.body.touching.down || this.sprite.body.blocked.down;
         
         // DYNAMIC PHYSICS: More drag on ground for stopping, less in air for drifting
-        const accel = isOnGround ? 1000 : 1200; 
-        const drag = isOnGround ? 800 : 200; 
-        const maxSpeed = 500;
+        const accel = isOnGround ? 1000 : 1800; // Increased air accel for flexibility (was 1200)
+        const drag = isOnGround ? 800 : 150; // Slightly less drag in air (was 200)
+        const maxSpeed = isOnGround ? 500 : 650; // Faster air horizontal speed
 
-        this.sprite.body.setMaxVelocity(maxSpeed, 1000);
+        this.sprite.body.setMaxVelocity(maxSpeed, 1200);
         this.sprite.body.setDragX(drag);
 
         // Horizontal Movement (Acceleration-based for "Drift" feel)
@@ -131,6 +137,10 @@ export default class Player {
             
             // Particles - LOWERED POSITION (y + 55)
             this.jetpackParticles.emitParticleAt(this.sprite.x, this.sprite.y + 55);
+        } else if (this.keys.down.isDown && !isOnGround && this.fuel > 0) {
+            // DOWNWARD THRUST (Air flexibility - Reduced by 45% as requested)
+            this.sprite.setAccelerationY(1100); 
+            this.fuel = Math.max(0, this.fuel - (delta * 0.0066));
         } else {
             this.sprite.setAccelerationY(0);
             
@@ -229,6 +239,8 @@ export default class Player {
 
     takeDamage(amount) {
         if (this.isRespawning) return;
+        if (useGameStore.getState().godMode) return; // God Mode Protection
+        
         this.health = Math.max(0, this.health - amount);
         this.syncUI();
         this.lastDamageTime = this.scene.time.now;
@@ -252,5 +264,47 @@ export default class Player {
         } else {
             store.setAmmo(0, 0); // Show 0/0 for empty hands
         }
+    }
+
+    updateLaserSight() {
+        this.laserGraphics.clear();
+        
+        const currentWeapon = this.weapons.inventory[this.weapons.currentSlot];
+        if (currentWeapon !== 'sniper' && currentWeapon !== 'launcher') return;
+
+        const muzzle = this.visual.getMuzzlePosition();
+        const pointer = this.scene.input.activePointer;
+        const worldPoint = this.scene.cameras.main.getWorldPoint(pointer.x, pointer.y);
+        const angle = Phaser.Math.Angle.Between(muzzle.x, muzzle.y, worldPoint.x, worldPoint.y);
+
+        const wpData = this.weapons.weaponData[currentWeapon];
+        const maxRange = wpData ? wpData.range : 2000;
+        let endX = muzzle.x + Math.cos(angle) * maxRange;
+        let endY = muzzle.y + Math.sin(angle) * maxRange;
+
+        // Raycast for collisions
+        const step = 10;
+        for (let d = 0; d < maxRange; d += step) {
+            const px = muzzle.x + Math.cos(angle) * d;
+            const py = muzzle.y + Math.sin(angle) * d;
+
+            const hitWall = this.scene.platformLayer.getTileAtWorldXY(px, py, true)?.canCollide;
+            // Check enemies
+            const hitEnemy = this.scene.enemies.getChildren().find(e => e.active && e.getBounds().contains(px, py));
+
+            if (hitWall || hitEnemy) {
+                endX = px;
+                endY = py;
+                break;
+            }
+        }
+
+        // Draw the laser
+        this.laserGraphics.lineStyle(1.5, 0xff0000, 0.5); // Thin red semi-transparent laser
+        this.laserGraphics.lineBetween(muzzle.x, muzzle.y, endX, endY);
+        
+        // Impact point dot
+        this.laserGraphics.fillStyle(0xff0000, 0.8);
+        this.laserGraphics.fillCircle(endX, endY, 3);
     }
 }
