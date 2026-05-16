@@ -345,7 +345,9 @@ export default class WeaponSystem {
 
         const throwAngle = Phaser.Math.Angle.Between(this.owner.x, this.owner.y, targetX, targetY);
         const spawnX = this.owner.x + Math.cos(throwAngle) * 65;
-        const spawnY = this.owner.y + Math.sin(throwAngle) * 65;
+        // Cap the spawn Y so it doesn't go below the player's feet (hitbox is 50px tall)
+        let spawnY = this.owner.y + Math.sin(throwAngle) * 65;
+        if (spawnY > this.owner.y + 10) spawnY = this.owner.y + 10;
 
         const grenade = this.grenadeGroup.get(spawnX, spawnY, 'grenade');
         if (grenade) {

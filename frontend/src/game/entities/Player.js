@@ -13,7 +13,7 @@ export default class Player {
         // 2. Create an invisible Physics Sprite for collision (The Hitbox)
         // We use a separate sprite so the container can flip and animate freely
         this.sprite = this.scene.physics.add.sprite(x, y, 'white_square');
-        this.sprite.body.setSize(40, 80);
+        this.sprite.body.setSize(30, 50);
         this.sprite.setVisible(false); // Invisible hitbox
         this.sprite.setCollideWorldBounds(true);
         this.sprite.setDragX(800);
