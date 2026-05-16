@@ -163,7 +163,7 @@ export default class Armory extends Phaser.Scene {
                         }
                     }
 
-                    this.playerPreview.refreshTextures();
+                    this.playerPreview.refreshTextures(useGameStore.getState().appearance);
                     btn.setText(`< MODEL ${nextIndex + 1} >`);
                 });
             });
