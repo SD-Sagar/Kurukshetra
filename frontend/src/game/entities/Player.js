@@ -219,7 +219,7 @@ export default class Player {
             const currentKey = this.weapons.inventory[this.weapons.currentSlot];
             if (currentKey) {
                 const dropped = this.weapons.dropCurrentWeapon();
-                // Toss the weapon slightly so it doesn't clip (Dropped weapons are temporary)
+                // Pass the actual ammo state of the dropped gun
                 this.scene.spawnWeaponPickup(this.sprite.x, this.sprite.y - 20, dropped.key, dropped.ammo, false);
             }
 

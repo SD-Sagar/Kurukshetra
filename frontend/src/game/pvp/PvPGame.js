@@ -131,8 +131,9 @@ export default class PvPGame extends Phaser.Scene {
         pickup.weaponKey = weaponKey;
         pickup.isPermanent = isPermanent;
         pickup.pointIndex = pointIndex;
+        pickup.ammo = ammo; // SAVE AMMO STATE
         
-        // Use provided lootId or generate a unique one for manual drops
+        // Use provided lootId or generate a unique one
         pickup.lootId = lootId || (pointIndex !== -1 ? `map_${pointIndex}` : `drop_${Date.now()}_${Math.random()}`);
         
         pickup.setDisplaySize(60, 30);
@@ -143,7 +144,7 @@ export default class PvPGame extends Phaser.Scene {
             pickup.body.setVelocity(vx, -200);
             this.time.delayedCall(15000, () => { if (pickup.active) pickup.destroy(); });
             
-            // BROADCAST MANUAL DROPS with the SAME velocity and ID
+            // BROADCAST manual drops with same ID, Velocity, and AMMO
             if (pointIndex === -1 && isLocal) {
                 PvPManager.sendPlayerUpdate({ 
                     event: 'spawn_loot', 
@@ -324,12 +325,23 @@ export default class PvPGame extends Phaser.Scene {
         this.player.isRespawning = true; // LOCK DAMAGE LOOP
         
         const currentWeapon = this.player.weapons.inventory[this.player.weapons.currentSlot];
+        const currentAmmo = this.player.weapons.ammo[this.player.weapons.currentSlot];
         
-        // Notify others of death + current weapon so they can spawn it
-        PvPManager.sendPlayerUpdate({ event: 'death', weapon: currentWeapon });
+        // Generate a shared lootId and velocity for the death drop
+        const deathLootId = `death_${this.player.id}_${Date.now()}`;
+        const deathVx = Phaser.Math.Between(-100, 100);
+
+        // Notify others of death + weapon state
+        PvPManager.sendPlayerUpdate({ 
+            event: 'death', 
+            weapon: currentWeapon, 
+            ammo: currentAmmo,
+            lootId: deathLootId,
+            vx: deathVx
+        });
 
         if (currentWeapon && currentWeapon !== 'dagger') {
-            this.spawnWeaponPickup(this.player.sprite.x, this.player.sprite.y, currentWeapon);
+            this.spawnWeaponPickup(this.player.sprite.x, this.player.sprite.y, currentWeapon, currentAmmo, false, -1, true, deathLootId, deathVx);
         }
         
         this.cameras.main.fadeOut(500);
