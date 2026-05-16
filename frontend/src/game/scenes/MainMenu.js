@@ -28,6 +28,7 @@ export default class MainMenu extends Phaser.Scene {
                 action: hasProgress ? () => this.continueSolo() : () => {}, 
                 color: hasProgress ? '#ffffff' : '#64748b' 
             },
+            { text: 'MULTIPLAYER', action: () => this.scene.start('PvPLobby'), color: '#22d3ee' },
             { text: 'CO-OP (COMING SOON)', action: () => {}, color: '#64748b' },
             { text: 'EXIT', action: () => this.exitGame(), color: '#ef4444' }
         ];

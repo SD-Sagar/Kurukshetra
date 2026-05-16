@@ -105,9 +105,12 @@ export default class WeaponSystem {
             this.spawnBullet(targetX, targetY, wp);
         }
 
-        // Play Sound
         if (wp.sound) {
             this.scene.sound.play(wp.sound, { volume: 0.6 });
+        }
+
+        if (this.onFire) {
+            this.onFire({ targetX, targetY, weapon: currentWpKey });
         }
     }
 
@@ -117,24 +120,27 @@ export default class WeaponSystem {
         }
         this.scene.sound.play('dagger_sound', { volume: 0.5 });
 
-        // Damage check
+        // Damage check (Local player hitting remote players)
         const startX = this.owner.x;
         const startY = this.owner.y;
         const angle = Phaser.Math.Angle.Between(startX, startY, targetX, targetY);
 
-        if (this.scene.enemies) {
-            this.scene.enemies.getChildren().forEach(enemy => {
-                if (!enemy.active) return;
-                const dist = Phaser.Math.Distance.Between(startX, startY, enemy.x, enemy.y);
+        if (this.scene.networkPlayers) {
+            this.networkPlayersArray = Array.from(this.scene.networkPlayers.values());
+            this.networkPlayersArray.forEach(np => {
+                const dist = Phaser.Math.Distance.Between(startX, startY, np.container.x, np.container.y);
                 if (dist < wp.range) {
-                    // Check if enemy is roughly in front of us (90 degree arc)
-                    const angleToEnemy = Phaser.Math.Angle.Between(startX, startY, enemy.x, enemy.y);
+                    const angleToEnemy = Phaser.Math.Angle.Between(startX, startY, np.container.x, np.container.y);
                     const diff = Math.abs(Phaser.Math.Angle.Wrap(angle - angleToEnemy));
                     if (diff < Math.PI / 3) {
-                        this.scene.bulletHitEnemy({ active: true, damage: wp.damage, destroy: () => {} }, enemy);
+                        if (this.onMeleeHit) this.onMeleeHit({ id: np.id, damage: wp.damage });
                     }
                 }
             });
+        }
+
+        if (this.onMelee) {
+            this.onMelee({ targetX, targetY });
         }
     }
 

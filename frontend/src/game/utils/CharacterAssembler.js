@@ -15,9 +15,10 @@ export default class CharacterAssembler {
 
         // Dynamic Appearance Mapping
         const store = useGameStore.getState();
-        const app = this.type === 'player' ? store.appearance : {
+        const app = config.appearance || (this.type === 'player' ? store.appearance : {
             head: prefix, torso: prefix, arms: prefix, legs: prefix
-        };
+        });
+        this.appearance = app; // Store it for refresh
 
         // Configuration based on type
         const isGoldenRatio = this.type === 'player' || this.type === 'sarge';
@@ -89,7 +90,7 @@ export default class CharacterAssembler {
     }
 
     setExpression(type) {
-        const app = this.type === 'player' ? useGameStore.getState().appearance : { head: this.type === 'sarge' ? 'sarge' : 'enemy' };
+        const app = this.appearance;
         
         if (type === 'shock') {
             this.head.setTexture(`headShock-${app.head}`);
@@ -101,11 +102,7 @@ export default class CharacterAssembler {
     }
 
     update(time, delta, velocityX, isCrouching = false, weaponColor = null, grenades = 0) {
-        const store = useGameStore.getState();
-        const app = this.type === 'player' ? store.appearance : {
-            head: this.type === 'sarge' ? 'sarge' : 'enemy',
-            legs: this.type === 'sarge' ? 'sarge' : 'enemy'
-        };
+        const app = this.appearance;
         
         this.currentWeaponColor = weaponColor;
         
@@ -114,11 +111,10 @@ export default class CharacterAssembler {
             this.grenadeBelt.setVisible(grenades > 0);
         }
 
-        if (weaponColor !== null) {
+        // Show weapon if key exists
+        if (weaponColor && weaponColor !== null) {
             this.weapon.setVisible(true);
-            if (typeof weaponColor === 'string') {
-                this.weapon.setTexture(weaponColor);
-            }
+            this.weapon.setTexture(weaponColor);
         } else {
             this.weapon.setVisible(false);
         }
@@ -372,15 +368,11 @@ export default class CharacterAssembler {
         this.refreshTextures();
     }
 
-    refreshTextures() {
+    refreshTextures(newApp = null) {
         if (!this.head || !this.head.scene) return; // Safety check
-        const store = useGameStore.getState();
-        const app = this.type === 'player' ? store.appearance : {
-            head: this.type === 'sarge' ? 'sarge' : 'enemy',
-            torso: this.type === 'sarge' ? 'sarge' : 'enemy',
-            arms: this.type === 'sarge' ? 'sarge' : 'enemy',
-            legs: this.type === 'sarge' ? 'sarge' : 'enemy'
-        };
+        
+        if (newApp) this.appearance = newApp;
+        const app = this.appearance;
 
         this.legBack.setTexture(`leg-${app.legs}`);
         this.legFront.setTexture(`leg-${app.legs}`);

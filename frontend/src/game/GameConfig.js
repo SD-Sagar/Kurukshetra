@@ -5,6 +5,9 @@ import Armory from './scenes/Armory';
 import Scene1_Breach from './scenes/Scene1_Breach';
 import Scene2_Recruitment from './scenes/Scene2_Recruitment';
 import MainGame from './scenes/MainGame';
+import PvPLobby from './pvp/PvPLobby';
+import PvPArmory from './pvp/PvPArmory';
+import PvPGame from './pvp/PvPGame';
 
 export default function initGame(containerId) {
     const config = {
@@ -31,7 +34,10 @@ export default function initGame(containerId) {
             Armory,
             Scene1_Breach,
             Scene2_Recruitment,
-            MainGame
+            MainGame,
+            PvPLobby,
+            PvPArmory,
+            PvPGame
         ],
         backgroundColor: '#111827'
     };
