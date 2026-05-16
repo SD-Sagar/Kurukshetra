@@ -39,6 +39,7 @@ export default class NetworkPlayer {
         this.targetRotation = 0;
         this.isCrouching = false;
         this.currentWeapon = 'pistol';
+        this.isDead = false;
     }
 
     updateData(data) {
@@ -54,14 +55,21 @@ export default class NetworkPlayer {
 
     update(time, delta) {
         // Smooth Interpolation (Lerp)
-        const lerpFactor = 0.25; // Increased for snappier response
+        const lerpFactor = 0.15; // Lower for smoother movement
         const dist = Phaser.Math.Distance.Between(this.container.x, this.container.y, this.targetX, this.targetY);
         
+        // If we move a LOT while invisible, we probably respawned!
+        if (dist > 100 && !this.container.visible) {
+            this.isDead = false;
+            this.visual.reset();
+        }
+
+        if (this.isDead) return; // Don't move or show if dead
+
         if (dist > 300) {
-            // SNAP if too far (prevents crazy sliding)
             this.container.x = this.targetX;
             this.container.y = this.targetY;
-        } else if (dist > 0.1) {
+        } else if (dist > 0.01) {
             this.container.x += (this.targetX - this.container.x) * lerpFactor;
             this.container.y += (this.targetY - this.container.y) * lerpFactor;
         }

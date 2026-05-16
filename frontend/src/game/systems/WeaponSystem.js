@@ -156,6 +156,11 @@ export default class WeaponSystem {
         });
         this.scene.time.delayedCall(600, () => particles.destroy());
 
+        // Notify Scene for Network Sync
+        if (this.scene.onExplosion) {
+            this.scene.onExplosion({ x, y, radius, damage });
+        }
+
         // Play Explosion Sound with Proximity Check
         if (this.scene.player && this.scene.player.sprite) {
             const dist = Phaser.Math.Distance.Between(x, y, this.scene.player.sprite.x, this.scene.player.sprite.y);
@@ -187,6 +192,11 @@ export default class WeaponSystem {
                 if (typeof t.takeDamage === 'function') {
                     handler = (dmg) => t.takeDamage(dmg);
                 }
+            } else if (t.id && t.container) { // NetworkPlayer class
+                targetSprite = t.container;
+                handler = (dmg) => {
+                    if (this.scene.handlePvPHit) this.scene.handlePvPHit(t.id, dmg);
+                };
             } else if (t.active) { // Raw Enemy sprite
                 targetSprite = t;
                 handler = (dmg) => {
