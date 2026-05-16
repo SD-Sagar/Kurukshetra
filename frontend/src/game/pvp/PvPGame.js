@@ -305,6 +305,7 @@ export default class PvPGame extends Phaser.Scene {
                 grenade.body.setCircle(12);
                 grenade.body.setDrag(50);
                 this.physics.add.collider(grenade, this.platforms);
+                this.physics.add.collider(grenade, this.player.sprite);
                 
                 this.time.delayedCall(2500, () => {
                     if (grenade.active) {

@@ -46,9 +46,12 @@ export default class WeaponSystem {
             allowGravity: true
         });
 
-        // Add Platform Collision for Grenades
+        // Add Platform and Enemy Collision for Grenades
         if (this.scene.platforms) {
             this.scene.physics.add.collider(this.grenadeGroup, this.scene.platforms);
+        }
+        if (this.scene.enemies) {
+            this.scene.physics.add.collider(this.grenadeGroup, this.scene.enemies);
         }
     }
 
