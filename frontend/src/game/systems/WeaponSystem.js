@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { useGameStore } from '../../store/gameStore';
+import PvPManager from '../pvp/PvPManager';
 
 export default class WeaponSystem {
     constructor(scene, owner, visual = null) {
