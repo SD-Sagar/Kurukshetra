@@ -20,8 +20,8 @@ export default class NetworkPlayer {
         
         // Physics setup (remote players are mostly kinematic/interpolated but need bodies for collision)
         this.container.body.setAllowGravity(false);
-        this.container.body.setSize(40, 80);
-        this.container.body.setOffset(-20, -40);
+        this.container.body.setSize(30, 50);
+        this.container.body.setOffset(-15, -20);
 
         // Name Tag
         this.nameTag = scene.add.text(0, -60, this.name, {

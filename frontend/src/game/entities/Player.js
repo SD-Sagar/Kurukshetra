@@ -190,6 +190,7 @@ export default class Player {
             // GRENADE PICKUP
             if (nearest.weaponKey === 'grenade') {
                 this.weapons.grenades += 3;
+                if (this.scene.notifyPickup) this.scene.notifyPickup(nearest.lootId);
                 nearest.destroy();
                 return;
             }
@@ -198,6 +199,7 @@ export default class Player {
             if (nearest.weaponKey === 'medkit') {
                 this.health = 100;
                 this.syncUI();
+                if (this.scene.notifyPickup) this.scene.notifyPickup(nearest.lootId);
                 nearest.destroy();
                 return;
             }
@@ -208,6 +210,7 @@ export default class Player {
             if (duplicateSlot !== -1) {
                 // It's a duplicate! Just add ammo and destroy pickup
                 this.weapons.addWeapon(nearest.weaponKey, nearest.ammo);
+                if (this.scene.notifyPickup) this.scene.notifyPickup(nearest.lootId);
                 nearest.destroy();
                 return;
             }
@@ -221,6 +224,7 @@ export default class Player {
             }
 
             this.weapons.addWeapon(nearest.weaponKey, nearest.ammo);
+            if (this.scene.notifyPickup) this.scene.notifyPickup(nearest.lootId);
             nearest.destroy();
         }
     }

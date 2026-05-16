@@ -15,8 +15,8 @@ export default class PvPGame extends Phaser.Scene {
         const pvpStore = usePvPStore.getState();
         const store = useGameStore.getState();
 
-        // 1. Tiled Map Integration (PVP MAP)
-        const map = this.make.tilemap({ key: 'pvp_map' });
+        // 1. Tiled Map Integration (USE THE MASTER MAP)
+        const map = this.make.tilemap({ key: 'map' });
         const bgTileset = map.addTilesetImage('background', 'tileset_background');
         const mainTileset = map.addTilesetImage('tileset_70', 'tileset_70', 70, 70, 0, 2);
 
@@ -113,6 +113,9 @@ export default class PvPGame extends Phaser.Scene {
         
         // Event for Network Explosions
         this.onExplosion = (data) => PvPManager.sendPlayerUpdate({ event: 'explosion', ...data });
+        
+        // Event for Network Grenades
+        this.onGrenade = (data) => PvPManager.sendPlayerUpdate({ event: 'grenade', ...data });
     }
 
     spawnNewLootAtPoint(point) {
@@ -123,27 +126,43 @@ export default class PvPGame extends Phaser.Scene {
         point.active = true;
     }
 
-    spawnWeaponPickup(x, y, weaponKey, ammo = null, isPermanent = false, pointIndex = -1, isLocal = true) {
+    spawnWeaponPickup(x, y, weaponKey, ammo = null, isPermanent = false, pointIndex = -1, isLocal = true, lootId = null, syncedVx = null) {
         const pickup = this.weaponPickups.create(x, y, weaponKey);
         pickup.weaponKey = weaponKey;
         pickup.isPermanent = isPermanent;
         pickup.pointIndex = pointIndex;
+        
+        // Use provided lootId or generate a unique one for manual drops
+        pickup.lootId = lootId || (pointIndex !== -1 ? `map_${pointIndex}` : `drop_${Date.now()}_${Math.random()}`);
+        
         pickup.setDisplaySize(60, 30);
         pickup.body.setSize(40, 20).setBounce(0.5).setDrag(100);
 
         if (!isPermanent) {
-            pickup.body.setVelocity(Phaser.Math.Between(-100, 100), -200);
-            this.time.delayedCall(10000, () => { if (pickup.active) pickup.destroy(); });
+            const vx = syncedVx !== null ? syncedVx : Phaser.Math.Between(-150, 150);
+            pickup.body.setVelocity(vx, -200);
+            this.time.delayedCall(15000, () => { if (pickup.active) pickup.destroy(); });
             
-            // BROADCAST MANUAL DROPS (Local player only AND not from network)
+            // BROADCAST MANUAL DROPS with the SAME velocity and ID
             if (pointIndex === -1 && isLocal) {
-                PvPManager.sendPlayerUpdate({ event: 'spawn_loot', x, y, weaponKey, ammo });
+                PvPManager.sendPlayerUpdate({ 
+                    event: 'spawn_loot', 
+                    x, y, weaponKey, ammo, 
+                    lootId: pickup.lootId,
+                    vx: vx 
+                });
             }
         } else {
             pickup.body.setImmovable(true);
             pickup.body.setAllowGravity(false);
         }
         return pickup;
+    }
+
+    notifyPickup(lootId) {
+        if (lootId) {
+            PvPManager.sendPlayerUpdate({ event: 'despawn_loot', lootId });
+        }
     }
 
     bulletHitEnemy(bullet, enemyContainer) {
@@ -218,8 +237,8 @@ export default class PvPGame extends Phaser.Scene {
                     for (let i = 0; i < wpData.pellets; i++) {
                         const angle = startAngle + (step * i);
                         const b = this.add.sprite(muzzle.x, muzzle.y, 'white_square');
-                        b.setDisplaySize(4, 4); // Matched Solo size
-                        b.setTint(0xffd700); // Matched Solo Golden tint
+                        b.setDisplaySize(4, 4); 
+                        b.setTint(0xffd700); // Golden
                         this.physics.add.existing(b);
                         b.body.setAllowGravity(false);
                         b.body.setVelocity(Math.cos(angle) * 1200, Math.sin(angle) * 1200);
@@ -247,17 +266,25 @@ export default class PvPGame extends Phaser.Scene {
                     const angle = Phaser.Math.Angle.Between(muzzle.x, muzzle.y, event.targetX, event.targetY);
                     bullet.body.setVelocity(Math.cos(angle) * 1200, Math.sin(angle) * 1200);
                     bullet.setRotation(angle + Math.PI);
+                    
+                    // Local collision for visual destruction
                     this.physics.add.collider(bullet, this.platforms, () => bullet.destroy());
+                    this.physics.add.overlap(bullet, this.player.sprite, () => bullet.destroy());
                     this.time.delayedCall(1000, () => bullet.destroy());
                 }
             }
 
             if (event.event === 'explosion') {
-                this.player.weapons.createExplosion(event.x, event.y, event.radius, 0, null);
+                this.player.weapons.createExplosion(event.x, event.y, event.radius, 0, null, true);
             }
 
             if (event.event === 'spawn_loot') {
-                this.spawnWeaponPickup(event.x, event.y, event.weaponKey, event.ammo, false, -1, false); // isLocal = false
+                this.spawnWeaponPickup(event.x, event.y, event.weaponKey, event.ammo, false, -1, false, event.lootId, event.vx);
+            }
+
+            if (event.event === 'despawn_loot') {
+                const pickup = this.weaponPickups.getChildren().find(p => p.lootId === event.lootId);
+                if (pickup) pickup.destroy();
             }
 
             if (event.event === 'death') {
@@ -266,6 +293,24 @@ export default class PvPGame extends Phaser.Scene {
                     np.isDead = true; // Lock visibility
                     np.visual.explode();
                 }
+            }
+
+            if (event.event === 'grenade') {
+                const grenade = this.add.sprite(event.x, event.y, 'grenade');
+                grenade.setDisplaySize(33, 33);
+                this.physics.add.existing(grenade);
+                grenade.body.setVelocity(event.vx, event.vy);
+                grenade.body.setBounce(0.6);
+                grenade.body.setCircle(12);
+                grenade.body.setDrag(50);
+                this.physics.add.collider(grenade, this.platforms);
+                
+                this.time.delayedCall(2500, () => {
+                    if (grenade.active) {
+                        this.player.weapons.createExplosion(grenade.x, grenade.y, 150, 0, null, true);
+                        grenade.destroy();
+                    }
+                });
             }
 
             if (event.event === 'hit' && event.targetId === PvPManager.socket.id) {
@@ -283,7 +328,7 @@ export default class PvPGame extends Phaser.Scene {
         // Notify others of death + current weapon so they can spawn it
         PvPManager.sendPlayerUpdate({ event: 'death', weapon: currentWeapon });
 
-        if (currentWeapon && currentWeapon !== 'pistol' && currentWeapon !== 'dagger') {
+        if (currentWeapon && currentWeapon !== 'dagger') {
             this.spawnWeaponPickup(this.player.sprite.x, this.player.sprite.y, currentWeapon);
         }
         

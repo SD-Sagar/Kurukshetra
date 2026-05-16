@@ -44,6 +44,11 @@ export default class WeaponSystem {
             classType: Phaser.Physics.Arcade.Image,
             allowGravity: true
         });
+
+        // Add Platform Collision for Grenades
+        if (this.scene.platforms) {
+            this.scene.physics.add.collider(this.grenadeGroup, this.scene.platforms);
+        }
     }
 
     getCurrentWeapon() {
@@ -144,24 +149,36 @@ export default class WeaponSystem {
         }
     }
 
-    createExplosion(x, y, radius, damage, owner) {
-        // VISUALS: Trigger immediately at the top
+    createExplosion(x, y, radius, damage, owner, isNetwork = false) {
+        const explosionDamage = (damage !== undefined && damage !== null) ? damage : 50;
+
+        // VISUALS: Expanding Fire Ring
+        const ring = this.scene.add.circle(x, y, 5, 0xff4400, 0.6);
+        this.scene.tweens.add({
+            targets: ring,
+            radius: radius,
+            alpha: 0,
+            duration: 400,
+            onComplete: () => ring.destroy()
+        });
+
+        // Sparks Particles
         const particles = this.scene.add.particles(x, y, 'explosion_part', {
-            speed: { min: 100, max: 300 },
+            speed: { min: 100, max: 400 },
             lifespan: 600,
-            scale: { start: 3, end: 0 },
-            quantity: 40,
+            scale: { start: 2, end: 0 },
+            quantity: 30,
             blendMode: 'ADD',
-            tint: 0xff00ff // Pink Blast
+            tint: [0xff4400, 0xff8800, 0xffff00] // Fire Gradient
         });
         this.scene.time.delayedCall(600, () => particles.destroy());
 
-        // Notify Scene for Network Sync
-        if (this.scene.onExplosion) {
-            this.scene.onExplosion({ x, y, radius, damage });
+        // Notify Scene for Network Sync (Only if we are the owner of the explosion)
+        if (this.scene.onExplosion && !isNetwork) {
+            this.scene.onExplosion({ x, y, radius, damage: explosionDamage });
         }
 
-        // Play Explosion Sound with Proximity Check
+        // Play Explosion Sound
         if (this.scene.player && this.scene.player.sprite) {
             const dist = Phaser.Math.Distance.Between(x, y, this.scene.player.sprite.x, this.scene.player.sprite.y);
             if (dist < 1700) {
@@ -171,63 +188,29 @@ export default class WeaponSystem {
             }
         }
 
-        // Splash Damage Targets Check
-        const targets = [];
-        if (this.scene.enemies) targets.push(...this.scene.enemies.getChildren());
-        if (this.scene.player) targets.push(this.scene.player);
-        if (this.scene.sarge) targets.push(this.scene.sarge);
+        // PHYSICAL BLAST (Checks for damage)
+        const blast = this.scene.add.circle(x, y, radius);
+        this.scene.physics.add.existing(blast);
+        blast.body.setCircle(radius);
+        
+        // Damage Local Player
+        if (this.scene.player) {
+            this.scene.physics.overlap(blast, this.scene.player.sprite, () => {
+                this.scene.player.takeDamage(explosionDamage);
+            });
+        }
 
-        targets.forEach(t => {
-            if (!t) return;
-            
-            // SARGE FRIENDLY FIRE PROTECTION: Skip if owner is player and target is sarge
-            if (owner === this.scene.player?.sprite && t === this.scene.sarge) return;
-
-            // Determine the physics sprite and damage handler
-            let targetSprite = null;
-            let handler = null;
-
-            if (t.sprite && t.sprite.active) { // Player or SargeAI class
-                targetSprite = t.sprite;
-                if (typeof t.takeDamage === 'function') {
-                    handler = (dmg) => t.takeDamage(dmg);
+        // Damage Enemies (ONLY IF LOCAL EXPLOSION - to prevent loops)
+        if (!isNetwork && this.scene.enemies && explosionDamage > 0) {
+            this.scene.physics.overlap(blast, this.scene.enemies, (b, enemy) => {
+                const np = Array.from(this.scene.networkPlayers?.values() || []).find(p => p.container === enemy);
+                if (np) {
+                    PvPManager.sendPlayerUpdate({ event: 'hit', targetId: np.id, damage: explosionDamage });
                 }
-            } else if (t.id && t.container) { // NetworkPlayer class
-                targetSprite = t.container;
-                handler = (dmg) => {
-                    if (this.scene.handlePvPHit) this.scene.handlePvPHit(t.id, dmg);
-                };
-            } else if (t.active) { // Raw Enemy sprite
-                targetSprite = t;
-                handler = (dmg) => {
-                    t.health = (t.health || 50) - dmg;
-                    if (t.health <= 0) {
-                        // Correctly trigger enemy death via the scene logic
-                        this.scene.bulletHitEnemy({ active: true, isRocket: false, damage: 0, owner: owner, destroy: () => {} }, t);
-                    }
-                };
-            }
+            });
+        }
 
-            if (!targetSprite || !handler) return;
-            
-            const dist = Phaser.Math.Distance.Between(x, y, targetSprite.x, targetSprite.y);
-            const effectiveRadius = radius || 200; // Increased default radius
-
-            if (dist < effectiveRadius) {
-                // FLATTENED FALLOFF: 100% damage in the inner 60% (90px for 150px blast), then falloff to 0
-                const innerRadius = effectiveRadius * 0.6;
-                let finalDamage = damage;
-
-                if (dist > innerRadius) {
-                    const falloffDist = effectiveRadius - innerRadius;
-                    const distInFalloff = dist - innerRadius;
-                    const factor = 1 - (distInFalloff / falloffDist);
-                    finalDamage = damage * factor;
-                }
-
-                handler(Math.max(0, finalDamage));
-            }
-        });
+        this.scene.time.delayedCall(50, () => blast.destroy());
     }
 
     spawnBullet(targetX, targetY, weapon) {
@@ -259,8 +242,15 @@ export default class WeaponSystem {
             const angle = Phaser.Math.Angle.Between(this.owner.x, this.owner.y, targetX, targetY);
             
             // USE NEW BULLET PNG FOR SPECIFIC GUNS
+            const isShotgun = ['shotgun', 'tacticalshotgun'].includes(weapon.key);
             const useBulletPng = ['pistol', 'rifle', 'smg', 'machinegun', 'sarge_smg'].includes(weapon.key);
-            if (useBulletPng) {
+            
+            if (isShotgun) {
+                bullet.setTexture('white_square');
+                bullet.setDisplaySize(4, 4);
+                bullet.setTint(0xffd700); // Golden
+                bullet.setRotation(angle);
+            } else if (useBulletPng) {
                 bullet.setTexture('bullet');
                 bullet.setRotation(angle + Math.PI); // Faces Left in PNG, so add 180 deg
                 bullet.setDisplaySize(20, 10);
@@ -353,8 +343,8 @@ export default class WeaponSystem {
         }
 
         const throwAngle = Phaser.Math.Angle.Between(this.owner.x, this.owner.y, targetX, targetY);
-        const spawnX = this.owner.x + Math.cos(throwAngle) * 45;
-        const spawnY = this.owner.y + Math.sin(throwAngle) * 45;
+        const spawnX = this.owner.x + Math.cos(throwAngle) * 65;
+        const spawnY = this.owner.y + Math.sin(throwAngle) * 65;
 
         const grenade = this.grenadeGroup.get(spawnX, spawnY, 'grenade');
         if (grenade) {
@@ -379,6 +369,11 @@ export default class WeaponSystem {
                 const vy = Math.sin(angle) * throwStrength + (this.owner.body ? this.owner.body.velocity.y : 0);
                 
                 grenade.body.setVelocity(vx, vy);
+
+                // Notify Scene for Network Sync
+                if (this.scene.onGrenade) {
+                    this.scene.onGrenade({ x: grenade.x, y: grenade.y, vx, vy });
+                }
             }
 
             // Fuse (Reduced to 2.5s)
